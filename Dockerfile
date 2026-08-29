@@ -11,14 +11,14 @@ RUN apt-get update && apt-get install -y curl gnupg \
 # Copy all source files
 COPY . .
 
-# Copy the built SPA files into the publish folder's wwwroot (or your configured SPA static files path)
-RUN cp -r /src/ClientApp/dist/* /app/publish/wwwroot/
-
 # Restore .NET dependencies
 RUN dotnet restore "AllenKerberAutoSupply.csproj"
 
 # Build and publish both the .NET API and the Angular frontend
 RUN dotnet publish "AllenKerberAutoSupply.csproj" -c Release -o /app/publish
+
+# Copy the built SPA files into the publish folder's wwwroot (or your configured SPA static files path)
+RUN cp -r /src/ClientApp/dist/* /app/publish/wwwroot/
 
 # 2. Runtime Stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
