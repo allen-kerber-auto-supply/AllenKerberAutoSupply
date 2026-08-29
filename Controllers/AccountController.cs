@@ -15,25 +15,14 @@ public sealed class AccountController(
     IPasswordHasher<UserAccount> passwordHasher,
     IConfiguration configuration) : ControllerBase
 {
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] Credentials input, CancellationToken cancellationToken)
-    {
-        var email = FirestoreUserRoleStore.Normalize(input.Email);
-        if (!IsEmail(email) || input.Password.Length < 12)
-            return BadRequest("Use a valid email address and a password of at least 12 characters.");
-        if (await users.FindAsync(email, cancellationToken) is not null)
-            return Conflict("An account already exists for this email.");
-        var user = new UserAccount { Email = email, DisplayName = email };
-        user.PasswordHash = passwordHasher.HashPassword(user, input.Password);
-        await users.UpsertAsync(user, cancellationToken);
-        return await SignIn(user);
-    }
-
     [HttpPost("password-login")]
     public async Task<IActionResult> PasswordLogin([FromBody] Credentials input, CancellationToken cancellationToken)
     {
         var user = await users.FindAsync(FirestoreUserRoleStore.Normalize(input.Email), cancellationToken);
-        if (user is null || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, input.Password) == PasswordVerificationResult.Failed)
+        if (user is null)
+            return AccessDenied();
+        if (string.IsNullOrWhiteSpace(user.PasswordHash)
+            || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, input.Password) == PasswordVerificationResult.Failed)
             return Unauthorized("Invalid email or password.");
         return await SignIn(user);
     }
@@ -67,12 +56,21 @@ public sealed class AccountController(
     private async Task<IActionResult> SignIn(UserAccount user)
     {
         if (user.Roles.Count == 0)
-            return Unauthorized("Your account has not been assigned a role.");
+            return AccessDenied();
         var claims = new List<Claim> { new(ClaimTypes.Name, user.DisplayName), new(ClaimTypes.Email, user.Email) };
         claims.AddRange(user.Roles.Where(RoleNames.All.Contains).Select(role => new Claim(ClaimTypes.Role, role)));
+        if (claims.All(claim => claim.Type != ClaimTypes.Role))
+            return AccessDenied();
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)));
         return Ok(new { roles = user.Roles });
     }
+
+    private IActionResult AccessDenied()
+        => StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = "access_denied",
+            message = "Your account is not authorized to use this application."
+        });
 
     private bool IsProviderConfigured(string providerName)
     {
@@ -82,7 +80,6 @@ public sealed class AccountController(
         return !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
     }
 
-    private static bool IsEmail(string value) => new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(value);
 }
 
 public sealed record Credentials(string Email, string Password);

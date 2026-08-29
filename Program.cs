@@ -58,11 +58,6 @@ app.UseAuthorization();
 app.UseEndpoints(endpoints =>
 {
     endpoints.MapGet("/auth/login", () => Results.Redirect("/auth/external/Google")).AllowAnonymous();
-    endpoints.MapPost("/auth/logout", async (HttpContext context) =>
-    {
-        await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        return Results.NoContent();
-    }).RequireAuthorization();
     endpoints.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(new
     {
         authenticated = context.User.Identity?.IsAuthenticated ?? false,
@@ -164,11 +159,18 @@ static void ConfigureExternalTicket(OAuthOptions options)
             if (string.IsNullOrWhiteSpace(email))
                 throw new InvalidOperationException("The external provider did not return an email address.");
             var account = await context.HttpContext.RequestServices.GetRequiredService<IUserRoleStore>()
-                .FindAsync(email, context.HttpContext.RequestAborted)
-                ?? throw new InvalidOperationException("This email is not registered in the users collection.");
+                .FindAsync(email, context.HttpContext.RequestAborted);
+            if (account is null || !account.Roles.Any(RoleNames.All.Contains))
+                throw new InvalidOperationException("The authenticated email is not authorized.");
             var identity = (System.Security.Claims.ClaimsIdentity)context.Principal!.Identity!;
             foreach (var role in account.Roles.Where(RoleNames.All.Contains))
                 identity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role));
+        },
+        OnRemoteFailure = context =>
+        {
+            context.Response.Redirect("/access-denied");
+            context.HandleResponse();
+            return Task.CompletedTask;
         }
     };
 }

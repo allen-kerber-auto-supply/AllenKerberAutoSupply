@@ -39,3 +39,22 @@ stored in this project.
 The Google libraries automatically discover ADC. For a non-user local
 credential, set `GOOGLE_APPLICATION_CREDENTIALS` to a credential file path
 without committing that file.
+
+## User provisioning and authorization
+
+Both Google and email/password sign-in require a matching document in the
+Firestore `users` collection. The document is keyed by the normalized
+lowercase email (the store also supports an `Email` field lookup) and uses
+these fields:
+
+- `Email`: the user's email address
+- `DisplayName`: the name shown after sign-in
+- `PasswordHash`: an ASP.NET Identity password hash for email/password users;
+  it may be empty for Google-only users
+- `Roles`: one or more of `InvoiceAdmin`, `InvoiceUser`,
+  `CustomerInvoiceUser`, `SalesAdmin`, or `SalesUser`
+
+There is no public registration or access-request workflow. User documents and
+password hashes must be provisioned out of band by an administrator. A Google
+account is not granted access unless its verified email matches a provisioned
+document with a recognized role.
