@@ -55,20 +55,23 @@ app.UseSpaStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapGet("/auth/login", () => Results.Redirect("/auth/external/Google")).AllowAnonymous();
-app.MapPost("/auth/logout", async (HttpContext context) =>
+app.UseEndpoints(endpoints =>
 {
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    return Results.NoContent();
-}).RequireAuthorization();
-app.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(new
-{
-    authenticated = context.User.Identity?.IsAuthenticated ?? false,
-    name = context.User.Identity?.Name,
-    roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value)
-})).AllowAnonymous();
-app.MapControllers();
-app.MapHealthChecks("/healthz");
+    endpoints.MapGet("/auth/login", () => Results.Redirect("/auth/external/Google")).AllowAnonymous();
+    endpoints.MapPost("/auth/logout", async (HttpContext context) =>
+    {
+        await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return Results.NoContent();
+    }).RequireAuthorization();
+    endpoints.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(new
+    {
+        authenticated = context.User.Identity?.IsAuthenticated ?? false,
+        name = context.User.Identity?.Name,
+        roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value)
+    })).AllowAnonymous();
+    endpoints.MapControllers();
+    endpoints.MapHealthChecks("/healthz");
+});
 app.UseSpa(spa =>
 {
     spa.Options.SourcePath = "ClientApp";
@@ -148,7 +151,12 @@ static void ConfigureExternalTicket(OAuthOptions options)
     {
         OnCreatingTicket = async context =>
         {
-            using var response = await context.Backchannel.GetAsync(options.UserInformationEndpoint, context.HttpContext.RequestAborted);
+            if (string.IsNullOrWhiteSpace(context.AccessToken))
+                throw new InvalidOperationException("The external provider did not return an access token.");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, options.UserInformationEndpoint);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", context.AccessToken);
+            using var response = await context.Backchannel.SendAsync(request, context.HttpContext.RequestAborted);
             response.EnsureSuccessStatusCode();
             using var user = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(context.HttpContext.RequestAborted));
             context.RunClaimActions(user.RootElement);
