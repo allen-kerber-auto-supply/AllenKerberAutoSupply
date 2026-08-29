@@ -51,10 +51,15 @@ these fields:
 - `DisplayName`: the name shown after sign-in
 - `PasswordHash`: an ASP.NET Identity password hash for email/password users;
   it may be empty for Google-only users
+- `MustChangePassword`: when `true`, the account must replace its temporary
+  password after its next email/password sign-in
 - `Roles`: one or more of `InvoiceAdmin`, `InvoiceUser`,
   `CustomerInvoiceUser`, `SalesAdmin`, or `SalesUser`
 
 There is no public registration or access-request workflow. User documents and
-password hashes must be provisioned out of band by an administrator. A Google
+password hashes can be provisioned by a user with an `InvoiceAdmin` or
+`SalesAdmin` role through the **User administration** workspace. New users and
+password resets receive a temporary password and must change it before accessing
+protected application features. A Google
 account is not granted access unless its verified email matches a provisioned
 document with a recognized role.

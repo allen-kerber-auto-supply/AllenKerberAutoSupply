@@ -6,7 +6,7 @@ namespace AllenKerberAutoSupply.Controllers;
 
 [ApiController]
 [Route("api/invoices")]
-[Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser}")]
+[Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser}")]
 public sealed class InvoicesController(IInvoiceRepository repository) : ControllerBase
 {
     [HttpGet]

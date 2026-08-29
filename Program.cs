@@ -41,14 +41,27 @@ var authBuilder = builder.Services.AddAuthentication(options =>
     options.Cookie.SameSite = SameSiteMode.Lax;
 });
 IfConfigured(authBuilder, "Google", builder.Configuration, ConfigureGoogle);
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthorizationPolicies.ActiveAccount, policy =>
+        policy.RequireAuthenticatedUser().RequireAssertion(context =>
+            !context.User.HasClaim(AuthenticationClaims.PasswordChangeRequired, bool.TrueString)));
+    options.AddPolicy(AuthorizationPolicies.UserManagement, policy =>
+        policy.RequireRole(RoleNames.Administrators).RequireAssertion(context =>
+            !context.User.HasClaim(AuthenticationClaims.PasswordChangeRequired, bool.TrueString)));
+});
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 builder.Services.AddSpaStaticFiles(options => options.RootPath = "ClientApp/dist");
 
 var app = builder.Build();
-if (!app.Environment.IsDevelopment())
-    app.UseExceptionHandler("/error");
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    app.Logger.LogError(exception, "Unhandled exception processing {Path}", context.Request.Path);
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await Results.Problem("An unexpected error occurred. Please try again.").ExecuteAsync(context);
+}));
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseSpaStaticFiles();
@@ -62,7 +75,9 @@ app.UseEndpoints(endpoints =>
     {
         authenticated = context.User.Identity?.IsAuthenticated ?? false,
         name = context.User.Identity?.Name,
-        roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value)
+        email = context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value,
+        roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value),
+        mustChangePassword = context.User.HasClaim(AuthenticationClaims.PasswordChangeRequired, bool.TrueString)
     })).AllowAnonymous();
     endpoints.MapControllers();
     endpoints.MapHealthChecks("/healthz");
