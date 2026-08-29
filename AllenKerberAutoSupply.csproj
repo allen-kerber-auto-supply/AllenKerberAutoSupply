@@ -15,10 +15,24 @@
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.0" />
   </ItemGroup>
+  <!-- Define the npm command based on the OS -->
+  <PropertyGroup>
+    <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
+    <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
+  </PropertyGroup>
+
+  <!-- Update your target to use the NpmCommand property -->
+  <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">
+    <!-- Ensure Node.js is installed -->
+    <Exec Command="$(NpmCommand) --version" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="ErrorCode" />
+    </Exec>
+    <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project." />
+  </Target>
+
   <Target Name="PublishAngular" AfterTargets="ComputeFilesToPublish">
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm.cmd install" />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm.cmd run build -- --configuration production" />
-    <ItemGroup>
+    <Exec Command="$(NpmCommand) install" />
+    <Exec Command="$(NpmCommand) run build -- --configuration production" />    <ItemGroup>
       <DistFiles Include="$(SpaRoot)dist\**" />
       <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
         <RelativePath>wwwroot\%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
