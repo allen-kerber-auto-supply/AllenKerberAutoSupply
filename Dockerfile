@@ -33,7 +33,4 @@ EXPOSE 8080
 # Configure ASP.NET to bind to port 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
-COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "AllenKerberAutoSupply.dll"]
