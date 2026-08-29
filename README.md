@@ -25,9 +25,10 @@ stored in this project.
 
    The app automatically skips Google sign-in if either value is missing, so it will still start without live Google credentials during local development.
 
-4. Configure the Google callback URL:
+4. Configure these exact Google OAuth redirect URIs in the Google Cloud OAuth client:
 
-   - `https://localhost:4595/auth/google-callback`
+   - Production: `https://www.allenandkerberautosupply.net/auth/google-callback`
+   - Local: `https://localhost:4595/auth/google-callback`
 
 5. Start the application:
 

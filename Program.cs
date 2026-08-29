@@ -13,6 +13,7 @@ builder.Services.Configure<GoogleCloudOptions>(builder.Configuration.GetSection(
 builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
 var googleCloud = builder.Configuration.GetSection(GoogleCloudOptions.SectionName).Get<GoogleCloudOptions>()
     ?? throw new InvalidOperationException("GoogleCloud configuration is required.");
+await LoadConfiguredSecretsAsync(builder.Configuration, googleCloud.ProjectId);
 builder.Services.AddSingleton(sp =>
 {
     var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleCloudOptions>>().Value;
@@ -104,6 +105,26 @@ static bool IsProviderConfigured(IConfiguration configuration, string providerNa
     var clientId = provider["ClientId"] ?? string.Empty;
     var clientSecret = provider["ClientSecret"] ?? string.Empty;
     return !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+}
+
+static async Task LoadConfiguredSecretsAsync(IConfiguration configuration, string projectId)
+{
+    var google = configuration.GetSection("ExternalAuth:Google");
+    if (!string.IsNullOrWhiteSpace(google["ClientSecret"]) || string.IsNullOrWhiteSpace(google["SecretName"]))
+        return;
+
+    if (string.IsNullOrWhiteSpace(projectId))
+        throw new InvalidOperationException("GoogleCloud:ProjectId is required to load authentication secrets.");
+
+    var secretName = google["SecretName"]!.Trim();
+    var secretVersion = new Google.Cloud.SecretManager.V1.SecretVersionName(projectId, secretName, "latest");
+    var client = await Google.Cloud.SecretManager.V1.SecretManagerServiceClient.CreateAsync();
+    var version = await client.AccessSecretVersionAsync(secretVersion);
+    var secret = version.Payload.Data.ToStringUtf8();
+    if (string.IsNullOrWhiteSpace(secret))
+        throw new InvalidOperationException($"Secret Manager secret '{secretName}' is empty.");
+
+    configuration["ExternalAuth:Google:ClientSecret"] = secret;
 }
 
 static void ConfigureGoogle(OAuthOptions options, IConfiguration configuration)
