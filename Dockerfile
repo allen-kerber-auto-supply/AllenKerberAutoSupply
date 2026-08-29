@@ -1,10 +1,10 @@
-# 1. Build Stage (Includes .NET SDK and Node.js)
+# 1. Build Stage (Includes .NET SDK and the latest Node.js)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Install Node.js (v18) and npm required for the Angular build
+# Install the latest Node.js version and npm
 RUN apt-get update && apt-get install -y curl gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_current.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
@@ -17,7 +17,7 @@ RUN dotnet restore "AllenKerberAutoSupply.csproj"
 # Build and publish both the .NET API and the Angular frontend
 RUN dotnet publish "AllenKerberAutoSupply.csproj" -c Release -o /app/publish
 
-# 2. Runtime Stage (Lightweight production image, Node.js is NOT needed here)
+# 2. Runtime Stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
