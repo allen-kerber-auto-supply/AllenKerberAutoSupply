@@ -3,6 +3,7 @@ bin/
 obj/
 ClientApp/node_modules/
 ClientApp/dist/
+ClientApp/.angular/
 
 # IDE/editor
 .vs/
