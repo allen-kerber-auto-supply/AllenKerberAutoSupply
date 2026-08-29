@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y curl gnupg \
 # Copy all source files
 COPY . .
 
+# Copy the built SPA files into the publish folder's wwwroot (or your configured SPA static files path)
+RUN cp -r /src/ClientApp/dist/* /app/publish/wwwroot/
+
 # Restore .NET dependencies
 RUN dotnet restore "AllenKerberAutoSupply.csproj"
 
@@ -30,5 +33,7 @@ EXPOSE 8080
 # Configure ASP.NET to bind to port 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
-# Start the web application
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "AllenKerberAutoSupply.dll"]
