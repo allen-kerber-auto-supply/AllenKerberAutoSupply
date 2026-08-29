@@ -17,8 +17,10 @@ RUN dotnet restore "AllenKerberAutoSupply.csproj"
 # Build and publish both the .NET API and the Angular frontend
 RUN dotnet publish "AllenKerberAutoSupply.csproj" -c Release -o /app/publish
 
-# Step 6: Copy the compiled frontend assets into the folder ASP.NET Core expects (ClientApp/dist)
-RUN mkdir -p /app/publish/ClientApp/dist && cp -r /src/ClientApp/dist/* /app/publish/ClientApp/dist/
+# Step 6: Copy compiled assets, accounting for Angular 17+'s nested /browser/ folder
+RUN mkdir -p /app/publish/ClientApp/dist && \
+    (cp -r /src/ClientApp/dist/browser/* /app/publish/ClientApp/dist/ 2>/dev/null || \
+     cp -r /src/ClientApp/dist/* /app/publish/ClientApp/dist/)
 
 # 2. Runtime Stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
