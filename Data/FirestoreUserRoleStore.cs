@@ -9,12 +9,28 @@ public sealed class FirestoreUserRoleStore(FirestoreDb firestore) : IUserRoleSto
 
     public async Task<UserAccount?> FindAsync(string email, CancellationToken cancellationToken)
     {
-        var snapshot = await Users.Document(Normalize(email)).GetSnapshotAsync(cancellationToken);
-        return snapshot.Exists ? snapshot.ConvertTo<UserAccount>() : null;
+        var normalizedEmail = Normalize(email);
+        if (string.IsNullOrWhiteSpace(normalizedEmail))
+            return null;
+
+        var snapshot = await Users.Document(normalizedEmail).GetSnapshotAsync(cancellationToken);
+        if (snapshot.Exists)
+            return snapshot.ConvertTo<UserAccount>();
+
+        var byEmailQuery = await Users
+            .WhereEqualTo(nameof(UserAccount.Email), normalizedEmail)
+            .Limit(1)
+            .GetSnapshotAsync(cancellationToken);
+
+        var document = byEmailQuery.Documents.FirstOrDefault();
+        return document is null ? null : document.ConvertTo<UserAccount>();
     }
 
     public Task UpsertAsync(UserAccount user, CancellationToken cancellationToken)
-        => Users.Document(Normalize(user.Email)).SetAsync(user, cancellationToken: cancellationToken);
+    {
+        user.Email = Normalize(user.Email);
+        return Users.Document(Normalize(user.Email)).SetAsync(user, cancellationToken: cancellationToken);
+    }
 
-    public static string Normalize(string email) => email.Trim().ToLowerInvariant();
+    public static string Normalize(string email) => string.IsNullOrWhiteSpace(email) ? string.Empty : email.Trim().ToLowerInvariant();
 }
