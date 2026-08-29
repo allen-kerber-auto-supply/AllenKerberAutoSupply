@@ -15,29 +15,27 @@
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.0" />
   </ItemGroup>
-  <!-- Define the npm command based on the OS -->
-  <PropertyGroup>
-    <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
-    <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
-  </PropertyGroup>
+<PropertyGroup>
+  <!-- 1. Define the relative path to your frontend folder (adjust 'ClientApp\' if your folder is named 'Client' or 'Frontend') -->
+  <SpaRoot>ClientApp\</SpaRoot>
+  
+  <!-- 2. Keep the cross-platform command helper -->
+  <NpmCommand Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NpmCommand>
+  <NpmCommand Condition="'$(OS)' != 'Windows_NT'">npm</NpmCommand>
+</PropertyGroup>
 
-  <!-- Update your target to use the NpmCommand property -->
-  <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">
-    <!-- Ensure Node.js is installed -->
-    <Exec Command="$(NpmCommand) --version" ContinueOnError="true">
-      <Output TaskParameter="ExitCode" PropertyName="ErrorCode" />
-    </Exec>
-    <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project." />
-  </Target>
+<!-- 3. Update the tasks to use WorkingDirectory="$(SpaRoot)" -->
+<Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">
+  <Exec Command="$(NpmCommand) --version" ContinueOnError="true">
+    <Output TaskParameter="ExitCode" PropertyName="ErrorCode" />
+  </Exec>
+  <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project." />
+</Target>
 
-  <Target Name="PublishAngular" AfterTargets="ComputeFilesToPublish">
-    <Exec Command="$(NpmCommand) install" />
-    <Exec Command="$(NpmCommand) run build -- --configuration production" />    <ItemGroup>
-      <DistFiles Include="$(SpaRoot)dist\**" />
-      <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
-        <RelativePath>wwwroot\%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
+<Target Name="PublishRunWebpack" AfterTargets="ComputeFilesToPublish">
+  <!-- Ensure npm runs inside the SpaRoot folder -->
+  <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCommand) install" />
+  <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCommand) run build -- --configuration production" />
+</Target>
+
 </Project>
