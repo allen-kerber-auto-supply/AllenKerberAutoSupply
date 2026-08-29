@@ -1,0 +1,14 @@
+# Build artifacts
+bin/
+obj/
+ClientApp/node_modules/
+ClientApp/dist/
+
+# IDE/editor
+.vs/
+*.user
+*.suo
+
+# OS files
+Thumbs.db
+.DS_Store

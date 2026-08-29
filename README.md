@@ -1,0 +1,40 @@
+# Allen and Kerber Auto Supply
+
+The application uses Google Application Default Credentials (ADC) for Firestore,
+Cloud Storage, and Secret Manager in every environment. No service-account key is
+stored in this project.
+
+## Development setup
+
+1. Install the Google Cloud CLI and authenticate ADC:
+
+   ```powershell
+   gcloud auth application-default login
+   gcloud auth application-default set-quota-project YOUR_PROJECT_ID
+   ```
+
+2. Ensure the authenticated account can access the configured Google Cloud
+   project, Firestore database, and image bucket.
+
+3. Set Google credentials in local configuration or environment variables:
+
+   ```powershell
+   $env:ExternalAuth__Google__ClientId="YOUR_GOOGLE_CLIENT_ID"
+   $env:ExternalAuth__Google__ClientSecret="YOUR_GOOGLE_CLIENT_SECRET"
+   ```
+
+   The app automatically skips Google sign-in if either value is missing, so it will still start without live Google credentials during local development.
+
+4. Configure the Google callback URL:
+
+   - `https://localhost:4595/auth/google-callback`
+
+5. Start the application:
+
+   ```powershell
+   dotnet run --project .\AllenKerberAutoSupply.csproj --launch-profile AllenKerberAutoSupply
+   ```
+
+The Google libraries automatically discover ADC. For a non-user local
+credential, set `GOOGLE_APPLICATION_CREDENTIALS` to a credential file path
+without committing that file.

@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "AllenKerberAutoSupply": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "/",
+      "applicationUrl": "https://localhost:4595;http://localhost:4596",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

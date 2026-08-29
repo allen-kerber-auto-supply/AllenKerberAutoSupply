@@ -1,0 +1,145 @@
+using AllenKerberAutoSupply.Data;
+using AllenKerberAutoSupply.Options;
+using AllenKerberAutoSupply.Models;
+using AllenKerberAutoSupply;
+using Google.Cloud.Firestore;
+using Google.Cloud.Storage.V1;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OAuth;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.Configure<GoogleCloudOptions>(builder.Configuration.GetSection(GoogleCloudOptions.SectionName));
+builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
+var googleCloud = builder.Configuration.GetSection(GoogleCloudOptions.SectionName).Get<GoogleCloudOptions>()
+    ?? throw new InvalidOperationException("GoogleCloud configuration is required.");
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleCloudOptions>>().Value;
+    return new FirestoreDbBuilder { ProjectId = options.ProjectId, DatabaseId = options.FirestoreDatabase }.Build();
+});
+builder.Services.AddSingleton(StorageClient.Create());
+builder.Services.AddSingleton<IInvoiceRepository, FirestoreInvoiceRepository>();
+builder.Services.AddSingleton<IUserRoleStore, FirestoreUserRoleStore>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Identity.IPasswordHasher<UserAccount>,
+    Microsoft.AspNetCore.Identity.PasswordHasher<UserAccount>>();
+var authBuilder = builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+})
+.AddCookie(options =>
+{
+    options.LoginPath = "/auth/login";
+    options.LogoutPath = "/auth/logout";
+    options.AccessDeniedPath = "/access-denied";
+    options.Cookie.Name = "__Host-AllenKerberAuth";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+});
+IfConfigured(authBuilder, "Google", builder.Configuration, ConfigureGoogle);
+builder.Services.AddAuthorization();
+builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
+builder.Services.AddSpaStaticFiles(options => options.RootPath = "ClientApp/dist");
+
+var app = builder.Build();
+if (!app.Environment.IsDevelopment())
+    app.UseExceptionHandler("/error");
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseSpaStaticFiles();
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGet("/auth/login", () => Results.Redirect("/auth/external/Google")).AllowAnonymous();
+app.MapPost("/auth/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.NoContent();
+}).RequireAuthorization();
+app.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(new
+{
+    authenticated = context.User.Identity?.IsAuthenticated ?? false,
+    name = context.User.Identity?.Name,
+    roles = context.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value)
+})).AllowAnonymous();
+app.MapControllers();
+app.MapHealthChecks("/healthz");
+app.UseSpa(spa =>
+{
+    spa.Options.SourcePath = "ClientApp";
+    if (app.Environment.IsDevelopment())
+        spa.UseProxyToSpaDevelopmentServer("http://localhost:4200");
+});
+using (var scope = app.Services.CreateScope())
+{
+    var roleStore = scope.ServiceProvider.GetRequiredService<IUserRoleStore>();
+    var initialUser = await roleStore.FindAsync("jwwalding@gmail.com", CancellationToken.None);
+    if (initialUser is null)
+    {
+        await roleStore.UpsertAsync(new UserAccount
+        {
+            Email = "jwwalding@gmail.com",
+            DisplayName = "Allen and Kerber Administrator",
+            Roles = [RoleNames.InvoiceAdmin, RoleNames.SalesAdmin]
+        }, CancellationToken.None);
+    }
+}
+app.Run();
+
+static void IfConfigured(AuthenticationBuilder authBuilder, string providerName, IConfiguration configuration, Action<OAuthOptions, IConfiguration> configure)
+{
+    if (!IsProviderConfigured(configuration, providerName))
+        return;
+
+    authBuilder.AddOAuth(providerName, options => configure(options, configuration));
+}
+
+static bool IsProviderConfigured(IConfiguration configuration, string providerName)
+{
+    var provider = configuration.GetSection($"ExternalAuth:{providerName}");
+    var clientId = provider["ClientId"] ?? string.Empty;
+    var clientSecret = provider["ClientSecret"] ?? string.Empty;
+    return !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+}
+
+static void ConfigureGoogle(OAuthOptions options, IConfiguration configuration)
+{
+    var provider = configuration.GetSection("ExternalAuth:Google");
+    options.ClientId = provider["ClientId"] ?? string.Empty;
+    options.ClientSecret = provider["ClientSecret"] ?? string.Empty;
+    options.CallbackPath = "/auth/google-callback";
+    options.AuthorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
+    options.TokenEndpoint = "https://oauth2.googleapis.com/token";
+    options.UserInformationEndpoint = "https://openidconnect.googleapis.com/v1/userinfo";
+    options.Scope.Add("openid"); options.Scope.Add("email"); options.Scope.Add("profile");
+    ConfigureExternalTicket(options);
+}
+
+static void ConfigureExternalTicket(OAuthOptions options)
+{
+    options.ClaimActions.MapJsonKey(System.Security.Claims.ClaimTypes.Email, "email");
+    options.ClaimActions.MapJsonKey(System.Security.Claims.ClaimTypes.Name, "name");
+    options.Events = new OAuthEvents
+    {
+        OnCreatingTicket = async context =>
+        {
+            using var response = await context.Backchannel.GetAsync(options.UserInformationEndpoint, context.HttpContext.RequestAborted);
+            response.EnsureSuccessStatusCode();
+            using var user = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(context.HttpContext.RequestAborted));
+            context.RunClaimActions(user.RootElement);
+            var email = user.RootElement.GetProperty("email").GetString();
+            if (string.IsNullOrWhiteSpace(email))
+                throw new InvalidOperationException("The external provider did not return an email address.");
+            var account = await context.HttpContext.RequestServices.GetRequiredService<IUserRoleStore>()
+                .FindAsync(email, context.HttpContext.RequestAborted)
+                ?? throw new InvalidOperationException("This email is not registered in the users collection.");
+            var identity = (System.Security.Claims.ClaimsIdentity)context.Principal!.Identity!;
+            foreach (var role in account.Roles.Where(RoleNames.All.Contains))
+                identity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role));
+        }
+    };
+}
