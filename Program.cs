@@ -94,16 +94,6 @@ app.UseSpa(spa =>
 using (var scope = app.Services.CreateScope())
 {
     var roleStore = scope.ServiceProvider.GetRequiredService<IUserRoleStore>();
-    var initialUser = await roleStore.FindAsync("jwwalding@gmail.com", CancellationToken.None);
-    if (initialUser is null)
-    {
-        await roleStore.UpsertAsync(new UserAccount
-        {
-            Email = "jwwalding@gmail.com",
-            DisplayName = "Allen and Kerber Administrator",
-            Roles = [RoleNames.InvoiceAdmin, RoleNames.SalesAdmin]
-        }, CancellationToken.None);
-    }
 }
 app.Run();
 
