@@ -29,10 +29,10 @@ WORKDIR /app
 # Copy the compiled output from the build stage
 COPY --from=build /app/publish .
 
-# Expose port 8080
-EXPOSE 8080
+# Expose port 4595
+EXPOSE 4595
 
-# Configure ASP.NET to bind to port 8080
-ENV ASPNETCORE_URLS=http://+:8080
+# Configure ASP.NET to bind to port 4595
+ENV ASPNETCORE_URLS=http://+:4595
 
 ENTRYPOINT ["dotnet", "AllenKerberAutoSupply.dll"]

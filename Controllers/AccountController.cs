@@ -35,11 +35,9 @@ public sealed class AccountController(
         if (string.IsNullOrWhiteSpace(normalizedProvider))
             return BadRequest("Provider is required.");
 
-        var scheme = normalizedProvider switch
-        {
-            "Google" => "Google",
-            _ => null
-        };
+        var scheme = string.Equals(normalizedProvider, "Google", StringComparison.OrdinalIgnoreCase)
+            ? "Google"
+            : null;
 
         if (scheme is null || !IsProviderConfigured(scheme))
             return BadRequest($"Authentication provider '{provider}' is not configured.");

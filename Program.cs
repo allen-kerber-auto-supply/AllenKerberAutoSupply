@@ -21,6 +21,9 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton(StorageClient.Create());
 builder.Services.AddSingleton<IInvoiceRepository, FirestoreInvoiceRepository>();
+builder.Services.AddSingleton<IInvoiceImageRepository, FirestoreInvoiceImageRepository>();
+builder.Services.AddSingleton<ICustomerRepository, FirestoreCustomerRepository>();
+builder.Services.AddSingleton<ISalesRepository, FirestoreSalesRepository>();
 builder.Services.AddSingleton<IUserRoleStore, FirestoreUserRoleStore>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Identity.IPasswordHasher<UserAccount>,
     Microsoft.AspNetCore.Identity.PasswordHasher<UserAccount>>();

@@ -1,0 +1,70 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Core Launch (Kestrel)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Debug/net10.0/AllenKerberAutoSupply.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "sourceFileMap": {
+                "/Views": "${workspaceFolder}/Views"
+            }
+        },
+        {
+            "name": "Launch Chrome (Angular)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "https://localhost:4595",
+            "webRoot": "${workspaceFolder}/ClientApp",
+            "sourceMaps": true,
+            "sourceMapPathOverrides": {
+                "webpack:///*": "${workspaceFolder}/ClientApp/*",
+                "vite:///*": "${workspaceFolder}/ClientApp/*",
+                "/@fs/*": "/*",
+                "src/*": "${workspaceFolder}/ClientApp/src/*"
+            }
+        },
+        {
+            "name": "Launch Edge (Angular)",
+            "type": "msedge",
+            "request": "launch",
+            "url": "https://localhost:4595",
+            "webRoot": "${workspaceFolder}/ClientApp",
+            "sourceMaps": true,
+            "sourceMapPathOverrides": {
+                "webpack:///*": "${workspaceFolder}/ClientApp/*",
+                "vite:///*": "${workspaceFolder}/ClientApp/*",
+                "/@fs/*": "/*",
+                "src/*": "${workspaceFolder}/ClientApp/src/*"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack (.NET Kestrel + Chrome)",
+            "configurations": [
+                ".NET Core Launch (Kestrel)",
+                "Launch Chrome (Angular)"
+            ]
+        },
+        {
+            "name": "Full Stack (.NET Kestrel + Edge)",
+            "configurations": [
+                ".NET Core Launch (Kestrel)",
+                "Launch Edge (Angular)"
+            ]
+        }
+    ]
+}
