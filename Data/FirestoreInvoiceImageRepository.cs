@@ -20,13 +20,13 @@ public sealed class FirestoreInvoiceImageRepository(
         if (storeNumber > 0)
         {
             string docId = $"{storeNumber}_{normalized}";
-            var doc = await firestore.Collection("invoice_images").Document(docId).GetSnapshotAsync(cancellationToken);
-            if (doc.Exists)
+            var doc = await GetDocumentSnapshotAsync("invoice_images", docId, cancellationToken);
+            if (doc?.Exists == true)
                 return doc.ConvertTo<InvoiceImageLookup>();
 
             string rawDocId = $"{storeNumber}_{raw}";
-            var rawDoc = await firestore.Collection("invoice_images").Document(rawDocId).GetSnapshotAsync(cancellationToken);
-            if (rawDoc.Exists)
+            var rawDoc = await GetDocumentSnapshotAsync("invoice_images", rawDocId, cancellationToken);
+            if (rawDoc?.Exists == true)
                 return rawDoc.ConvertTo<InvoiceImageLookup>();
         }
 
@@ -129,6 +129,18 @@ public sealed class FirestoreInvoiceImageRepository(
         }
 
         return null;
+    }
+
+    private async Task<DocumentSnapshot?> GetDocumentSnapshotAsync(string collectionName, string documentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await firestore.Collection(collectionName).Document(documentId).GetSnapshotAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     public async Task<Stream?> GetInvoiceImageStreamAsync(string invoiceNumber, int storeNumber, int pageIndex = 1, CancellationToken cancellationToken = default)
