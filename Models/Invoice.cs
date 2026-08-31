@@ -1,4 +1,5 @@
 using Google.Cloud.Firestore;
+using System.Text.Json.Serialization;
 
 namespace AllenKerberAutoSupply.Models;
 
@@ -9,7 +10,8 @@ public sealed class Invoice
     [FirestoreProperty] public int StoreNumber { get; set; }
     [FirestoreProperty] public int CustomerNumber { get; set; }
     [FirestoreProperty] public string CustomerName { get; set; } = string.Empty;
-    [FirestoreProperty] public Timestamp? InvoiceDate { get; set; }
+    [FirestoreProperty, JsonIgnore] public Timestamp? InvoiceDate { get; set; }
+    [JsonPropertyName("invoiceDate")] public DateTime? InvoiceDateValue => InvoiceDate?.ToDateTime();
     [FirestoreProperty] public double InvoiceAmount { get; set; }
     [FirestoreProperty] public string TransactionType { get; set; } = string.Empty;
     [FirestoreProperty] public string PaymentMethod { get; set; } = string.Empty;
