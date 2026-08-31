@@ -7,13 +7,20 @@ using Google.Cloud.Storage.V1;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Resend;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<GoogleCloudOptions>(builder.Configuration.GetSection(GoogleCloudOptions.SectionName));
 builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
+builder.Services.Configure<ResendOptions>(builder.Configuration.GetSection(ResendOptions.SectionName));
 var googleCloud = builder.Configuration.GetSection(GoogleCloudOptions.SectionName).Get<GoogleCloudOptions>()
     ?? throw new InvalidOperationException("GoogleCloud configuration is required.");
 await LoadConfiguredSecretsAsync(builder.Configuration, googleCloud.ProjectId);
+await LoadResendSecretAsync(builder.Configuration, googleCloud.ProjectId);
+builder.Services.AddResend(options =>
+{
+    options.ApiToken = builder.Configuration["Resend:ApiKey"] ?? string.Empty;
+});
 builder.Services.AddSingleton(sp =>
 {
     var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GoogleCloudOptions>>().Value;
@@ -131,6 +138,26 @@ static async Task LoadConfiguredSecretsAsync(IConfiguration configuration, strin
         throw new InvalidOperationException($"Secret Manager secret '{secretName}' is empty.");
 
     configuration["ExternalAuth:Google:ClientSecret"] = secret;
+}
+
+static async Task LoadResendSecretAsync(IConfiguration configuration, string projectId)
+{
+    var resend = configuration.GetSection("Resend");
+    if (!string.IsNullOrWhiteSpace(resend["ApiKey"]) || string.IsNullOrWhiteSpace(resend["SecretName"]))
+        return;
+
+    if (string.IsNullOrWhiteSpace(projectId))
+        throw new InvalidOperationException("GoogleCloud:ProjectId is required to load the Resend API key.");
+
+    var secretName = resend["SecretName"]!.Trim();
+    var secretVersion = new Google.Cloud.SecretManager.V1.SecretVersionName(projectId, secretName, "latest");
+    var client = await Google.Cloud.SecretManager.V1.SecretManagerServiceClient.CreateAsync();
+    var version = await client.AccessSecretVersionAsync(secretVersion);
+    var secret = version.Payload.Data.ToStringUtf8();
+    if (string.IsNullOrWhiteSpace(secret))
+        throw new InvalidOperationException($"Secret Manager secret '{secretName}' is empty.");
+
+    configuration["Resend:ApiKey"] = secret;
 }
 
 static void ConfigureGoogle(OAuthOptions options, IConfiguration configuration)

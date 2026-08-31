@@ -9,6 +9,8 @@ interface Invoice { invoiceNumber: string; storeNumber?: number; customerNumber:
 interface UserAccount { email: string; displayName: string; roles: string[]; mustChangePassword: boolean; }
 interface ViewerPage { pageIndex: number; url: string; blobUrl?: string; loaded: boolean; loading: boolean; error: boolean; errorMessage?: string; }
 interface CustomerSummary { customerNumber: number; customerName: string; }
+interface EmailGroup { customerNumber: number; customerName: string; invoices: Invoice[]; availableEmails: string[]; selectedEmails: string[]; adHocEmail: string; loadingEmails: boolean; }
+interface InvoiceEmailResult { customerNumber: number; email: string; success: boolean; error?: string; }
 type Destination = 'invoice' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
 type Theme = 'light' | 'dark';
 
@@ -130,17 +132,21 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
         <div class="invoice-results-col">
           <div *ngIf="!searchPerformed" class="heading"><div><p class="eyebrow">Records</p><h1>Invoice lookup</h1><p>Find invoices by invoice number, or by customer name and date range. Select an invoice to view and print images.</p></div></div>
           <div *ngIf="invoices.length" class="card table">
-            <h2>{{invoices.length}} invoice{{invoices.length===1?'':'s'}} found</h2>
+            <div class="table-header-row">
+              <h2>{{invoices.length}} invoice{{invoices.length===1?'':'s'}} found</h2>
+              <button class="button primary" type="button" [disabled]="!selectedInvoiceKeys.size" (click)="openEmailModal()">Email selected ({{selectedInvoiceKeys.size}})</button>
+            </div>
             <div class="table-scroll">
               <table>
-                <tr><th>Invoice</th><th>Store</th><th>Customer</th><th>Customer no.</th><th>Date</th><th>Amount</th></tr>
-                <tr *ngFor="let invoice of invoices" class="invoice-row" (click)="viewInvoice(invoice)">
-                  <td><b>{{invoice.invoiceNumber}}</b></td>
-                  <td>{{invoice.storeNumber}}</td>
-                  <td>{{invoice.customerName}}</td>
-                  <td>{{invoice.customerNumber}}</td>
-                  <td>{{invoice.invoiceDate | date:'M/d/yyyy'}}</td>
-                  <td>{{invoice.invoiceAmount | currency}}</td>
+                <tr><th></th><th>Invoice</th><th>Store</th><th>Customer</th><th>Customer no.</th><th>Date</th><th>Amount</th></tr>
+                <tr *ngFor="let invoice of invoices" class="invoice-row">
+                  <td class="select-cell" (click)="$event.stopPropagation()"><input type="checkbox" [checked]="isInvoiceSelected(invoice)" (change)="toggleInvoiceSelection(invoice)"></td>
+                  <td (click)="viewInvoice(invoice)"><b>{{invoice.invoiceNumber}}</b></td>
+                  <td (click)="viewInvoice(invoice)">{{invoice.storeNumber}}</td>
+                  <td (click)="viewInvoice(invoice)">{{invoice.customerName}}</td>
+                  <td (click)="viewInvoice(invoice)">{{invoice.customerNumber}}</td>
+                  <td (click)="viewInvoice(invoice)">{{invoice.invoiceDate | date:'M/d/yyyy'}}</td>
+                  <td (click)="viewInvoice(invoice)">{{invoice.invoiceAmount | currency}}</td>
                 </tr>
               </table>
             </div>
@@ -150,13 +156,44 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
       </div>
     </section>
 
+    <div *ngIf="emailModalOpen" class="modal-backdrop">
+      <div class="card modal email-modal">
+        <p class="eyebrow">Email invoices</p>
+        <h2>Send selected invoices</h2>
+        <section *ngIf="!emailGroups.length" class="muted-note">No invoices selected.</section>
+        <section *ngFor="let group of emailGroups" class="email-group">
+          <h3>{{group.customerName}} <small>#{{group.customerNumber}}</small></h3>
+          <p class="muted-note">Invoices: {{groupInvoiceLabel(group)}}</p>
+          <div *ngIf="group.loadingEmails" class="muted-note">Loading email addresses...</div>
+          <div *ngIf="!group.loadingEmails && group.availableEmails.length" class="email-checklist">
+            <label *ngFor="let email of group.availableEmails" class="check">
+              <input type="checkbox" [checked]="isGroupEmailSelected(group, email)" (change)="toggleGroupEmail(group, email, $any($event.target).checked)"> {{email}}
+            </label>
+          </div>
+          <p *ngIf="!group.loadingEmails && !group.availableEmails.length" class="muted-note">No email addresses on file for this customer.</p>
+          <label>Additional email address
+            <input type="email" [(ngModel)]="group.adHocEmail" placeholder="name@example.com">
+          </label>
+        </section>
+        <section *ngIf="emailError" class="alert">{{emailError}}</section>
+        <section *ngIf="emailResults" class="email-results">
+          <p><strong>Results:</strong></p>
+          <p *ngFor="let result of emailResults" [class.alert]="!result.success">{{result.email}} &mdash; {{result.success ? 'Sent' : ('Failed: ' + result.error)}}</p>
+        </section>
+        <div>
+          <button class="button secondary" type="button" (click)="closeEmailModal()">Close</button>
+          <button class="button primary" type="button" [disabled]="sendingEmails || !hasSelectableEmails()" (click)="sendSelectedInvoiceEmails()">{{sendingEmails ? 'Sending...' : 'Send emails'}}</button>
+        </div>
+      </div>
+    </div>
+
     <section *ngIf="authenticated && destination==='admin'" class="workspace"><div class="heading"><div><p class="eyebrow">Administration</p><h1>User access</h1><p>Create user accounts, assign access, and reset temporary passwords.</p></div><button class="button secondary" (click)="go(previousWorkspace)">Back to workspace</button></div><div class="admin-grid"><form class="card user-form" (ngSubmit)="createUser()"><h2>Add a user</h2><label>Full name<input [(ngModel)]="newUser.displayName" name="displayName" required placeholder="Jane Smith"></label><label>Email address<input [(ngModel)]="newUser.email" name="email" required type="email" placeholder="jane@company.com"></label><label>Temporary password<div class="code-field"><strong class="code-display">{{newUser.temporaryPassword}}</strong><button type="button" class="button secondary" (click)="newUser.temporaryPassword = generateTempPassword()">Generate new code</button></div></label><fieldset><legend>Access roles</legend><label *ngFor="let role of roleOptions" class="check"><input type="checkbox" [checked]="hasRole(role)" (change)="toggleRole(role, $any($event.target).checked)"> {{role}}</label></fieldset><button class="button primary" type="submit">Create user</button><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form><div class="card users"><div><p class="eyebrow">Provisioned users</p><h2>Current access</h2></div><p *ngIf="loadingUsers">Loading users...</p><div *ngIf="usersError" class="alert users-error"><span>{{usersError}}</span><button class="button secondary" type="button" (click)="loadUsers()">Retry</button></div><div *ngFor="let user of users" class="user-row"><div><b>{{user.displayName}}</b><small>{{user.email}}</small><em>{{user.roles.join(' · ')}}</em></div><div class="user-row-actions"><button class="button secondary" type="button" (click)="startEditRoles(user)">Edit roles</button><button class="button secondary" type="button" (click)="startReset(user)">Reset password</button><button class="button danger" type="button" [disabled]="isSelf(user)" [title]="isSelf(user) ? 'You cannot delete your own account.' : ''" (click)="startDelete(user)">Delete</button></div></div></div></div></section>
     <div *ngIf="resettingUser" class="modal-backdrop"><form class="card modal" (ngSubmit)="resetPassword()"><p class="eyebrow">Password reset</p><h2>Reset {{resettingUser.displayName}}’s password</h2><p>The user will be required to change it after their next email/password sign-in.</p><label>New temporary password<div class="code-field"><strong class="code-display">{{resetPasswordValue}}</strong><button type="button" class="button secondary" (click)="resetPasswordValue = generateTempPassword()">Generate new code</button></div></label><div><button class="button secondary" type="button" (click)="resettingUser=null">Cancel</button><button class="button primary" type="submit">Reset password</button></div><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form></div>
     <div *ngIf="editingRolesUser" class="modal-backdrop"><form class="card modal" (ngSubmit)="saveRoles()"><p class="eyebrow">Access roles</p><h2>Edit {{editingRolesUser.displayName}}’s roles</h2><p>Choose the roles this account should have.</p><fieldset><legend>Access roles</legend><label *ngFor="let role of roleOptions" class="check"><input type="checkbox" [checked]="hasEditingRole(role)" (change)="toggleEditingRole(role, $any($event.target).checked)"> {{role}}</label></fieldset><div><button class="button secondary" type="button" (click)="editingRolesUser=null">Cancel</button><button class="button primary" type="submit">Save roles</button></div><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form></div>
     <div *ngIf="deletingUser" class="modal-backdrop"><form class="card modal" (ngSubmit)="deleteUser()"><p class="eyebrow">Delete user</p><h2>Delete {{deletingUser.displayName}}?</h2><p>This permanently removes {{deletingUser.email}} and revokes their access. This cannot be undone.</p><div><button class="button secondary" type="button" (click)="deletingUser=null">Cancel</button><button class="button danger" type="submit">Delete user</button></div><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form></div>
   </main>`,
   styles: [`
-  main,.viewer-layout{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;min-height:100vh;color:var(--text)}main{padding:0 5vw 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace{max-width:1180px;margin:auto}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}.auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:8vw;padding:4rem 4vw}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;margin:7rem auto;padding:0 1.25rem}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem 4vw}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}.invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:4vw;padding-right:4vw}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:4vw;padding-right:4vw}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}.invoice-search-col{align-self:start}.invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem}.search-group{display:grid;gap:.8rem}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem}.table-scroll table{margin-top:0}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}.notice{margin:0;font-size:.8rem}.modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:10}.modal{width:min(450px,100%)}.modal>div{display:flex;justify-content:end;gap:.6rem}
+  main,.viewer-layout{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;min-height:100vh;color:var(--text)}main{padding:0 5vw 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace{max-width:1180px;margin:auto}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}.auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:8vw;padding:4rem 4vw}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;margin:7rem auto;padding:0 1.25rem}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem 4vw}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}.invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:4vw;padding-right:4vw}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:4vw;padding-right:4vw}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}.invoice-search-col{align-self:start}.invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem}.search-group{display:grid;gap:.8rem}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem}.table-scroll table{margin-top:0}.select-cell{width:2.2rem;text-align:center}.select-cell input{width:auto}.table-header-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.email-modal{width:min(560px,100%);max-height:80vh;overflow:auto}.email-group{display:grid;gap:.6rem;padding:1rem 0;border-top:1px solid var(--line)}.email-group:first-of-type{border-top:0;padding-top:0}.email-group h3{margin:0;font-size:1rem}.email-group h3 small{color:var(--muted);font-weight:400}.email-checklist{display:flex;flex-wrap:wrap;gap:.2rem .8rem}.muted-note{color:var(--muted);font-size:.82rem;margin:0}.email-results p{margin:.3rem 0;font-size:.85rem}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}.notice{margin:0;font-size:.8rem}.modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:10}.modal{width:min(450px,100%)}.modal>div{display:flex;justify-content:end;gap:.6rem}
 
   /* INVOICE VIEWER STYLES */
   .viewer-layout { min-height: 100vh; background: #1e293b; color: #0f172a; }
@@ -230,7 +267,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
 })
 class AppComponent implements OnInit {
   private readonly http = inject(HttpClient); private readonly elementRef = inject(ElementRef);
-  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; menuOpen = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; loginMode: 'google' | 'password' = 'password'; email = ''; password = ''; currentPassword = ''; newPassword = ''; confirmPassword = ''; invoiceNumber = ''; customerName = ''; allCustomers: CustomerSummary[] = []; dateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)); dateTo = toDateInputValue(new Date()); today = toDateInputValue(new Date()); searchPerformed = false; invoices: Invoice[] = []; error = ''; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
+  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; menuOpen = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; loginMode: 'google' | 'password' = 'password'; email = ''; password = ''; currentPassword = ''; newPassword = ''; confirmPassword = ''; invoiceNumber = ''; customerName = ''; allCustomers: CustomerSummary[] = []; dateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)); dateTo = toDateInputValue(new Date()); today = toDateInputValue(new Date()); searchPerformed = false; invoices: Invoice[] = []; error = ''; selectedInvoiceKeys = new Set<string>(); emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
   
   // Viewer state
   isViewer = false;
@@ -406,6 +443,7 @@ class AppComponent implements OnInit {
     this.runSearch('/api/invoices/by-date', params);
   }
   private runSearch(url: string, params: Record<string, string>) {
+    this.selectedInvoiceKeys.clear();
     this.http.get<Invoice[]>(url, { params }).subscribe({ next: x => this.invoices = x, error: e => this.error = e.status === 403 ? 'Update your password before using invoice lookup.' : 'Unable to search invoices.' });
   }
   loadCustomers() {
@@ -452,6 +490,86 @@ class AppComponent implements OnInit {
     if (invoice.customerNumber) params.set('custNo', String(invoice.customerNumber));
 
     window.open(`/invoice-view?${params.toString()}`, '_blank');
+  }
+
+  invoiceKey(invoice: Invoice) { return `${invoice.storeNumber || 0}|${invoice.invoiceNumber}`; }
+  isInvoiceSelected(invoice: Invoice) { return this.selectedInvoiceKeys.has(this.invoiceKey(invoice)); }
+  toggleInvoiceSelection(invoice: Invoice) {
+    const key = this.invoiceKey(invoice);
+    if (this.selectedInvoiceKeys.has(key)) this.selectedInvoiceKeys.delete(key);
+    else this.selectedInvoiceKeys.add(key);
+  }
+
+  openEmailModal() {
+    const selected = this.invoices.filter(invoice => this.isInvoiceSelected(invoice));
+    const byCustomer = new Map<number, EmailGroup>();
+    for (const invoice of selected) {
+      const customerNumber = Number(invoice.customerNumber);
+      let group = byCustomer.get(customerNumber);
+      if (!group) {
+        group = { customerNumber, customerName: invoice.customerName, invoices: [], availableEmails: [], selectedEmails: [], adHocEmail: '', loadingEmails: true };
+        byCustomer.set(customerNumber, group);
+      }
+      group.invoices.push(invoice);
+    }
+    this.emailGroups = Array.from(byCustomer.values());
+    this.emailResults = null;
+    this.emailError = '';
+    this.emailModalOpen = true;
+    for (const group of this.emailGroups) {
+      this.http.get<string[]>(`/api/customers/${group.customerNumber}/emails`).subscribe({
+        next: emails => { group.availableEmails = emails; group.loadingEmails = false; },
+        error: () => { group.loadingEmails = false; }
+      });
+    }
+  }
+
+  closeEmailModal() { this.emailModalOpen = false; this.emailGroups = []; this.emailResults = null; this.emailError = ''; }
+  isGroupEmailSelected(group: EmailGroup, email: string) { return group.selectedEmails.includes(email); }
+  toggleGroupEmail(group: EmailGroup, email: string, checked: boolean) {
+    group.selectedEmails = checked ? [...group.selectedEmails, email] : group.selectedEmails.filter(e => e !== email);
+  }
+  groupInvoiceLabel(group: EmailGroup) { return group.invoices.map(i => i.invoiceNumber).join(', '); }
+  hasSelectableEmails() {
+    return this.emailGroups.some(group => group.selectedEmails.length > 0 || !!group.adHocEmail.trim());
+  }
+
+  sendSelectedInvoiceEmails() {
+    this.emailError = '';
+    const groups = this.emailGroups
+      .map(group => {
+        const emails = [...group.selectedEmails];
+        const adHoc = group.adHocEmail.trim();
+        if (adHoc) emails.push(adHoc);
+        return {
+          customerNumber: group.customerNumber,
+          customerName: group.customerName,
+          invoices: group.invoices.map(i => ({ invoiceNumber: i.invoiceNumber, storeNumber: i.storeNumber || 0 })),
+          emails
+        };
+      })
+      .filter(group => group.emails.length > 0 && group.invoices.length > 0);
+
+    if (!groups.length) {
+      this.emailError = 'Select at least one recipient email address.';
+      return;
+    }
+
+    this.sendingEmails = true;
+    this.emailResults = null;
+    this.http.post<InvoiceEmailResult[]>('/api/invoices/email', { groups }).subscribe({
+      next: results => {
+        this.emailResults = results;
+        this.sendingEmails = false;
+        if (results.length > 0 && results.every(r => r.success)) {
+          this.selectedInvoiceKeys.clear();
+        }
+      },
+      error: e => {
+        this.sendingEmails = false;
+        this.emailError = e.error?.message || e.error || 'Unable to send emails.';
+      }
+    });
   }
 }
 bootstrapApplication(AppComponent, { providers: [provideHttpClient()] });

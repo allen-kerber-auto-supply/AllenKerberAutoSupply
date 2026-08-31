@@ -6,7 +6,7 @@ namespace AllenKerberAutoSupply.Controllers;
 
 [ApiController]
 [Route("api/customers")]
-[Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.SalesAdmin},{RoleNames.SalesUser}")]
+[Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser},{RoleNames.SalesAdmin},{RoleNames.SalesUser}")]
 public sealed class CustomersController(ICustomerRepository repository) : ControllerBase
 {
     [HttpGet]
