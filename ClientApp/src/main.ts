@@ -11,6 +11,32 @@ interface ViewerPage { pageIndex: number; url: string; blobUrl?: string; loaded:
 interface CustomerSummary { customerNumber: number; customerName: string; }
 interface EmailGroup { customerNumber: number; customerName: string; invoices: Invoice[]; availableEmails: string[]; selectedEmails: string[]; adHocEmail: string; loadingEmails: boolean; }
 interface InvoiceEmailResult { customerNumber: number; email: string; success: boolean; error?: string; }
+interface SalesRep { id?: number | string; repName?: string; repEmail?: string; name?: string; email?: string; status?: string; }
+interface SalesCustomer { customerNumber?: number; customerName?: string; accountName?: string; guid?: string; assignedSalesReps?: string[]; repEmail?: string; repName?: string; }
+interface SalesCall {
+  id?: string;
+  callID?: number;
+  accountName: string;
+  contactName?: string;
+  phone?: string;
+  contactPhone?: string;
+  comments?: string;
+  createdDate?: string;
+  callDate?: string;
+  followUpDate?: string;
+  repName?: string;
+  repEmail?: string;
+  salesRepEmail?: string;
+  status: number; // 0 = Scheduled, 1 = Completed
+  isProspect?: boolean;
+}
+interface AccountSummary {
+  accountName: string;
+  totalCalls: number;
+  lastCallDate?: string;
+  scheduledCalls: number;
+  completedCalls: number;
+}
 type Destination = 'invoice' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
 type Theme = 'light' | 'dark';
 
@@ -101,7 +127,472 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
 
     <section *ngIf="authenticated && destination==='choose'" class="workspace"><p class="eyebrow">Your workspace</p><h1>What are you working on?</h1><p>Choose an area to get started.</p><div class="grid"><button class="app-card" (click)="go('sales')"><i>S</i><span><small>Sales</small><b>Sales calls</b><em>Manage prospect and customer sales calls.</em></span>&rarr;</button><button class="app-card invoice" (click)="go('invoice')"><i>I</i><span><small>Records</small><b>Invoices</b><em>Find customer purchase history.</em></span>&rarr;</button></div></section>
 
-    <section *ngIf="authenticated && destination==='sales'" class="workspace"><div class="heading"><div><p class="eyebrow">Sales</p><h1>Sales calls</h1><p>Manage sales calls with existing and prospective customers.</p></div></div><div class="state"><div class="icon">S</div><h2>Sales workspace</h2><p>Sales call tools will appear here as they become available.</p></div></section>
+    <section *ngIf="authenticated && destination==='sales'" class="workspace sales-workspace">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">Sales</p>
+          <h1>Sales calls</h1>
+          <p>Manage sales calls with existing and prospective customers.</p>
+        </div>
+        <div class="sales-actions-top">
+          <label *ngIf="isSalesAdmin && salesReps.length" class="rep-filter-label">
+            <span>Sales Rep:</span>
+            <select [(ngModel)]="selectedSalesFilterRep" (change)="onFilterRepChange()">
+              <option value="">All Sales Reps</option>
+              <option *ngFor="let rep of salesReps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="sales-tabs">
+        <button type="button" [class.active]="salesTab==='scheduled'" (click)="setSalesTab('scheduled')">
+          <i>📅</i> Scheduled Calls <span class="badge" *ngIf="scheduledCalls.length">{{scheduledCalls.length}}</span>
+        </button>
+        <button type="button" [class.active]="salesTab==='new-call'" (click)="setSalesTab('new-call')">
+          <i>✍️</i> Log Call
+        </button>
+        <button type="button" [class.active]="salesTab==='history'" (click)="setSalesTab('history')">
+          <i>📜</i> Call History
+        </button>
+        <button type="button" *ngIf="isSalesAdmin" [class.active]="salesTab==='admin'" (click)="setSalesTab('admin')">
+          <i>⚙️</i> Reps &amp; Accounts
+        </button>
+      </div>
+
+      <!-- TAB 1: SCHEDULED CALLS -->
+      <div *ngIf="salesTab==='scheduled'" class="sales-tab-content">
+        <div class="card table">
+          <div class="table-header-row">
+            <div>
+              <h2>Scheduled Calls</h2>
+              <p class="muted-note">Upcoming and pending calls requiring attention</p>
+            </div>
+            <div class="table-actions">
+              <button class="button primary" type="button" (click)="setSalesTab('new-call')">+ Log New Call</button>
+            </div>
+          </div>
+          <div *ngIf="loadingScheduledCalls" class="state"><p>Loading scheduled calls...</p></div>
+          <div *ngIf="!loadingScheduledCalls && scheduledCalls.length" class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Account</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Call Date</th>
+                  <th>Rep</th>
+                  <th>Comments</th>
+                  <th class="action-cell">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let call of scheduledCalls" class="call-row">
+                  <td>
+                    <span class="status-badge scheduled">Scheduled</span>
+                    <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
+                  </td>
+                  <td><b>{{call.accountName}}</b></td>
+                  <td>{{call.contactName || '—'}}</td>
+                  <td><a *ngIf="call.contactPhone || call.phone" [href]="'tel:' + (call.contactPhone || call.phone)" class="phone-link">{{call.contactPhone || call.phone}}</a><span *ngIf="!call.contactPhone && !call.phone">—</span></td>
+                  <td><b>{{(call.callDate || call.followUpDate || call.createdDate) | date:'M/d/yyyy'}}</b></td>
+                  <td>{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</td>
+                  <td class="comments-cell" [title]="call.comments || ''">{{call.comments || '—'}}</td>
+                  <td class="action-cell">
+                    <div class="btn-group">
+                      <button class="button primary view-btn" type="button" (click)="openCompleteModal(call)">Complete</button>
+                      <button class="button secondary view-btn" type="button" (click)="openEditCall(call)">Edit</button>
+                      <button class="button danger view-btn" type="button" (click)="deleteCall(call)">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div *ngIf="!loadingScheduledCalls && !scheduledCalls.length" class="state">
+            <p>No scheduled calls found for the selected filter.</p>
+            <button class="button primary" type="button" (click)="setSalesTab('new-call')">Log a Call</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: LOG NEW CALL / EDIT CALL -->
+      <div *ngIf="salesTab==='new-call'" class="sales-tab-content new-call-layout">
+        <div class="card form-card">
+          <h2>Log Call or Follow-up</h2>
+          <p class="muted-note">Record customer interactions, schedule follow-ups, and review account history.</p>
+
+          <form (ngSubmit)="saveNewCall()" class="sales-form">
+            <div class="form-row">
+              <label>Account Name *
+                <input [(ngModel)]="newCall.accountName" name="accountName" list="salesCustomerOptions" placeholder="Type or select account name" (change)="onAccountNameChange()" (blur)="onAccountNameChange()" required autocomplete="off">
+                <datalist id="salesCustomerOptions">
+                  <option *ngFor="let c of salesCustomers" [value]="getAccountName(c)"></option>
+                  <option *ngFor="let c of allCustomers" [value]="c.customerName"></option>
+                </datalist>
+              </label>
+              <div class="account-type-indicator">
+                <span *ngIf="newCall.accountName && isAccountProspect(newCall.accountName)" class="status-badge prospect">Prospect Account</span>
+                <span *ngIf="newCall.accountName && !isAccountProspect(newCall.accountName)" class="status-badge customer">Assigned Customer</span>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <label>Contact Name
+                <input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person">
+              </label>
+              <label>Phone Number
+                <input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000">
+              </label>
+            </div>
+
+            <div class="form-grid-2">
+              <label>Call Date *
+                <input type="date" [(ngModel)]="newCall.callDate" name="callDate" required>
+              </label>
+              <label>Sales Rep *
+                <select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="!isSalesAdmin && salesReps.length > 0">
+                  <option *ngFor="let rep of salesReps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option>
+                </select>
+              </label>
+            </div>
+
+            <label>Call Notes / Discussion
+              <textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea>
+            </label>
+
+            <div class="form-grid-2">
+              <label>Status
+                <select [(ngModel)]="newCall.status" name="status">
+                  <option [ngValue]="1">Completed</option>
+                  <option [ngValue]="0">Scheduled / Open</option>
+                </select>
+              </label>
+              <label>Follow-up Date (Optional)
+                <input type="date" [(ngModel)]="newCall.followUpDate" name="followUpDate">
+                <small *ngIf="newCall.followUpDate" class="input-hint">Automatically schedules a follow-up call on this date</small>
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button class="button secondary" type="button" (click)="resetNewCallForm()">Clear Form</button>
+              <button class="button primary" type="submit" [disabled]="savingCall || !newCall.accountName.trim()">
+                {{savingCall ? 'Saving...' : 'Save Call Record'}}
+              </button>
+            </div>
+            <p *ngIf="callSuccessMessage" class="notice success">{{callSuccessMessage}}</p>
+            <p *ngIf="callErrorMessage" class="alert">{{callErrorMessage}}</p>
+          </form>
+        </div>
+
+        <!-- Prior history panel for selected account -->
+        <div class="card history-sidebar">
+          <div class="history-sidebar-header">
+            <h3>Account History</h3>
+            <p *ngIf="newCall.accountName" class="eyebrow">{{newCall.accountName}}</p>
+          </div>
+          <div *ngIf="!newCall.accountName" class="state muted-state">
+            <p>Select or enter an account name to view previous calls and notes.</p>
+          </div>
+          <div *ngIf="newCall.accountName && loadingCustomerHistory" class="state muted-state">
+            <p>Loading history...</p>
+          </div>
+          <div *ngIf="newCall.accountName && !loadingCustomerHistory && !selectedCustomerHistory.length" class="state muted-state">
+            <p>No prior call records found for this account.</p>
+          </div>
+          <div *ngIf="newCall.accountName && !loadingCustomerHistory && selectedCustomerHistory.length" class="history-timeline">
+            <div *ngFor="let h of selectedCustomerHistory" class="history-card">
+              <div class="history-card-header">
+                <span class="status-badge" [class.completed]="h.status===1" [class.scheduled]="h.status===0">
+                  {{h.status===1 ? 'Completed' : 'Scheduled'}}
+                </span>
+                <span class="history-date">{{(h.callDate || h.createdDate) | date:'M/d/yyyy'}}</span>
+              </div>
+              <div class="history-meta">
+                <span *ngIf="h.contactName"><b>Contact:</b> {{h.contactName}}</span>
+                <span *ngIf="h.contactPhone || h.phone"><b>Phone:</b> {{h.contactPhone || h.phone}}</span>
+                <span><b>Rep:</b> {{getRepDisplayName(h.repName, h.salesRepEmail || h.repEmail)}}</span>
+                <span *ngIf="h.followUpDate"><b>Follow-up:</b> {{h.followUpDate | date:'M/d/yyyy'}}</span>
+              </div>
+              <p *ngIf="h.comments" class="history-comments">{{h.comments}}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: CALL HISTORY & SUMMARY -->
+      <div *ngIf="salesTab==='history'" class="sales-tab-content">
+        <div class="card history-filter-card">
+          <div class="history-filter-top">
+            <div class="view-mode-toggle">
+              <button type="button" [class.active]="historyViewMode==='records'" (click)="historyViewMode='records'; loadCallHistory()">Call Records</button>
+              <button type="button" [class.active]="historyViewMode==='summary'" (click)="historyViewMode='summary'; loadCallHistory()">Account Summary</button>
+            </div>
+            <div class="history-filter-actions">
+              <button type="button" *ngIf="historyViewMode==='records' && callHistory.length" class="button secondary" (click)="exportHistoryCsv()">📥 Export CSV</button>
+              <button type="button" class="button secondary" (click)="printAccountList()">🖨️ Printable Account List</button>
+            </div>
+          </div>
+
+          <div class="history-filters-grid">
+            <div class="date-range" *ngIf="historyViewMode==='records'">
+              <label>From Date
+                <input type="date" [(ngModel)]="historyDateFrom" [max]="historyDateTo" (change)="loadCallHistory()">
+              </label>
+              <label>To Date
+                <input type="date" [(ngModel)]="historyDateTo" [min]="historyDateFrom" (change)="loadCallHistory()">
+              </label>
+            </div>
+            <label>Account Search
+              <input [(ngModel)]="historyAccountFilter" placeholder="Filter by account name..." (input)="onHistoryAccountSearchChange()">
+            </label>
+            <label *ngIf="isSalesAdmin">Sales Rep Filter
+              <select [(ngModel)]="selectedSalesFilterRep" (change)="loadCallHistory()">
+                <option value="">All Sales Reps</option>
+                <option *ngFor="let rep of salesReps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}}</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <!-- CALL RECORDS TABLE -->
+        <div *ngIf="historyViewMode==='records'" class="card table">
+          <div class="table-header-row">
+            <h2>{{filteredCallHistory.length}} Call Record{{filteredCallHistory.length===1?'':'s'}}</h2>
+          </div>
+          <div *ngIf="loadingHistory" class="state"><p>Loading call history...</p></div>
+          <div *ngIf="!loadingHistory && filteredCallHistory.length" class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Account</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Call Date</th>
+                  <th>Follow-up</th>
+                  <th>Rep</th>
+                  <th>Comments</th>
+                  <th class="action-cell">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let call of filteredCallHistory" class="call-row">
+                  <td>
+                    <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">
+                      {{call.status===1 ? 'Completed' : 'Scheduled'}}
+                    </span>
+                    <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
+                  </td>
+                  <td><b>{{call.accountName}}</b></td>
+                  <td>{{call.contactName || '—'}}</td>
+                  <td><a *ngIf="call.contactPhone || call.phone" [href]="'tel:' + (call.contactPhone || call.phone)" class="phone-link">{{call.contactPhone || call.phone}}</a><span *ngIf="!call.contactPhone && !call.phone">—</span></td>
+                  <td>{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</td>
+                  <td>{{call.followUpDate ? (call.followUpDate | date:'M/d/yyyy') : '—'}}</td>
+                  <td>{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</td>
+                  <td class="comments-cell" [title]="call.comments || ''">{{call.comments || '—'}}</td>
+                  <td class="action-cell">
+                    <div class="btn-group">
+                      <button class="button secondary view-btn" type="button" (click)="openEditCall(call)">Edit</button>
+                      <button class="button danger view-btn" type="button" (click)="deleteCall(call)">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div *ngIf="!loadingHistory && !filteredCallHistory.length" class="state"><p>No call records found matching criteria.</p></div>
+        </div>
+
+        <!-- ACCOUNT SUMMARY TABLE -->
+        <div *ngIf="historyViewMode==='summary'" class="card table">
+          <div class="table-header-row">
+            <h2>Account Calls Summary ({{filteredAccountSummaries.length}} Accounts)</h2>
+          </div>
+          <div *ngIf="loadingHistory" class="state"><p>Loading summaries...</p></div>
+          <div *ngIf="!loadingHistory && filteredAccountSummaries.length" class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account Name</th>
+                  <th>Total Calls</th>
+                  <th>Completed Calls</th>
+                  <th>Scheduled Calls</th>
+                  <th>Last Call Date</th>
+                  <th class="action-cell">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let s of filteredAccountSummaries">
+                  <td><b>{{s.accountName}}</b></td>
+                  <td><b>{{s.totalCalls}}</b></td>
+                  <td><span class="status-badge completed">{{s.completedCalls}}</span></td>
+                  <td><span class="status-badge scheduled">{{s.scheduledCalls}}</span></td>
+                  <td>{{s.lastCallDate ? (s.lastCallDate | date:'M/d/yyyy') : '—'}}</td>
+                  <td class="action-cell">
+                    <button class="button primary view-btn" type="button" (click)="logCallForAccount(s.accountName)">Log Call</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div *ngIf="!loadingHistory && !filteredAccountSummaries.length" class="state"><p>No accounts found.</p></div>
+        </div>
+      </div>
+
+      <!-- TAB 4: REPS & ACCOUNTS ADMIN (SalesAdmin only) -->
+      <div *ngIf="salesTab==='admin' && isSalesAdmin" class="sales-tab-content admin-grid">
+        <!-- SALES REPS -->
+        <div class="card sales-admin-card">
+          <h2>Sales Representatives</h2>
+          <p class="muted-note">Manage sales reps available for call assignments.</p>
+
+          <form (ngSubmit)="addSalesRep()" class="sales-admin-form">
+            <label>Rep Name
+              <input [(ngModel)]="newSalesRep.repName" name="repName" required placeholder="John Doe">
+            </label>
+            <label>Rep Email
+              <input [(ngModel)]="newSalesRep.repEmail" name="repEmail" type="email" required placeholder="john@allenkerber.com">
+            </label>
+            <button class="button primary" type="submit">Add Sales Rep</button>
+          </form>
+
+          <div class="table-scroll" style="max-height: 400px; margin-top: 1rem;">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+              <tbody>
+                <tr *ngFor="let r of salesReps">
+                  <td><b>{{r.repName || r.name}}</b></td>
+                  <td>{{r.repEmail || r.email}}</td>
+                  <td class="action-cell">
+                    <button class="button danger view-btn" type="button" (click)="deleteSalesRep(r)">Remove</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- CUSTOMER ACCOUNT ASSIGNMENTS -->
+        <div class="card sales-admin-card">
+          <h2>Customer Account Assignments</h2>
+          <p class="muted-note">Assign customer accounts to specific sales reps.</p>
+
+          <form (ngSubmit)="addSalesCustomer()" class="sales-admin-form">
+            <label>Account Name
+              <input [(ngModel)]="newCustomerName" name="custAccountName" required list="adminAccountSuggestions" placeholder="Acme Auto Body">
+              <datalist id="adminAccountSuggestions">
+                <option *ngFor="let c of salesCustomers" [value]="getAccountName(c)"></option>
+                <option *ngFor="let c of allCustomers" [value]="c.customerName"></option>
+              </datalist>
+            </label>
+            <label>Assigned Sales Rep
+              <select [(ngModel)]="selectedAssignRepEmail" name="custRepEmail" required>
+                <option value="" disabled>Select a Sales Rep</option>
+                <option *ngFor="let r of salesReps" [value]="r.repEmail || r.email">{{r.repName || r.name || r.repEmail || r.email}} ({{r.repEmail || r.email}})</option>
+              </select>
+            </label>
+            <button class="button primary" type="submit">Assign Account</button>
+          </form>
+
+          <div class="admin-table-filters" style="display: flex; gap: 0.5rem; margin-top: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+            <input [(ngModel)]="adminAccountFilter" (input)="applyAdminAccountFilter()" placeholder="Search accounts..." style="flex: 1; min-width: 140px;">
+            <select [(ngModel)]="adminRepFilter" (change)="applyAdminAccountFilter()" style="min-width: 140px;">
+              <option value="">All Reps & Unassigned</option>
+              <option value="__unassigned__">Unassigned Only</option>
+              <option *ngFor="let r of salesReps" [value]="r.repEmail || r.email">{{r.repName || r.name || r.repEmail || r.email}}</option>
+            </select>
+          </div>
+
+          <div class="table-scroll" style="max-height: 400px; margin-top: 0.5rem;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account Name ({{filteredSalesCustomers.length}})</th>
+                  <th>Assigned Rep(s)</th>
+                  <th class="action-cell"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let c of filteredSalesCustomers">
+                  <td><b>{{getAccountName(c)}}</b></td>
+                  <td>{{formatAssignedReps(c)}}</td>
+                  <td class="action-cell">
+                    <button class="button danger view-btn" type="button" (click)="deleteSalesCustomer(c)">Remove</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMPLETE CALL MODAL -->
+    <div *ngIf="completingCall" class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
+      <form class="card modal" (ngSubmit)="saveCompleteCall()">
+        <p class="eyebrow">Complete Call</p>
+        <h2>{{completingCall.accountName}}</h2>
+        <p>Mark this call as completed, add conversation notes, and optionally set a follow-up date.</p>
+
+        <label>Conversation Notes / Outcome *
+          <textarea [(ngModel)]="completingComments" name="completeNotes" rows="4" required placeholder="What was discussed during this call?"></textarea>
+        </label>
+
+        <label>Schedule Follow-up Date (Optional)
+          <input type="date" [(ngModel)]="completingFollowUpDate" name="completeFollowUp">
+          <small class="input-hint">If set, a new scheduled call will automatically be created on this date.</small>
+        </label>
+
+        <div class="modal-actions">
+          <button class="button secondary" type="button" (click)="completingCall=null">Cancel</button>
+          <button class="button primary" type="submit" [disabled]="!completingComments.trim()">Complete Call</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- EDIT CALL MODAL -->
+    <div *ngIf="editingCall" class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
+      <form class="card modal" (ngSubmit)="saveEditCall()">
+        <p class="eyebrow">Edit Call</p>
+        <h2>{{editingCall.accountName}}</h2>
+
+        <div class="form-grid-2">
+          <label>Contact Name
+            <input [(ngModel)]="editingCall.contactName" name="editContact">
+          </label>
+          <label>Phone
+            <input [(ngModel)]="editingCall.phone" name="editPhone">
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <label>Call Date
+            <input type="date" [(ngModel)]="editingCall.callDate" name="editCallDate">
+          </label>
+          <label>Follow-up Date
+            <input type="date" [(ngModel)]="editingCall.followUpDate" name="editFollowUp">
+          </label>
+        </div>
+
+        <label>Status
+          <select [(ngModel)]="editingCall.status" name="editStatus">
+            <option [ngValue]="0">Scheduled / Pending</option>
+            <option [ngValue]="1">Completed</option>
+          </select>
+        </label>
+
+        <label>Notes / Comments
+          <textarea [(ngModel)]="editingCall.comments" name="editComments" rows="4"></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="button secondary" type="button" (click)="editingCall=null">Cancel</button>
+          <button class="button primary" type="submit">Save Changes</button>
+        </div>
+      </form>
+    </div>
 
     <section *ngIf="authenticated && destination==='invoice'" class="workspace invoice-workspace">
       <div class="invoice-layout">
@@ -235,6 +726,69 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   .spinner.small { width: 28px; height: 28px; border-width: 3px; border-color: #e2e8f0; border-top-color: #185adb; margin: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* SALES WORKSPACE STYLES */
+  .sales-workspace { max-width: 1280px; margin: auto; }
+  .sales-actions-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .rep-filter-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .rep-filter-label select, select { padding: 0.65rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--text); font: inherit; }
+  select:focus { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); border-color: var(--blue); }
+  .sales-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; overflow-x: auto; }
+  .sales-tabs button { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); font: 700 0.88rem system-ui; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
+  .sales-tabs button:hover { background: var(--soft); color: var(--text); }
+  .sales-tabs button.active { background: var(--surface); color: var(--blue); border-color: var(--line); box-shadow: var(--shadow); }
+  .badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; background: var(--blue); color: #fff; }
+  .status-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .status-badge.scheduled { background: #e0e7ff; color: #3730a3; }
+  .dark-theme .status-badge.scheduled { background: #312e81; color: #c7d2fe; }
+  .status-badge.completed { background: #dcfce7; color: #166534; }
+  .dark-theme .status-badge.completed { background: #14532d; color: #bbf7d0; }
+  .status-badge.prospect { background: #fef3c7; color: #92400e; margin-left: 0.3rem; }
+  .dark-theme .status-badge.prospect { background: #78350f; color: #fde68a; margin-left: 0.3rem; }
+  .status-badge.customer { background: #dbeafe; color: #1e40af; }
+  .dark-theme .status-badge.customer { background: #1e3a8a; color: #bfdbfe; }
+  .new-call-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; align-items: start; }
+  @media(max-width: 900px) { .new-call-layout { grid-template-columns: 1fr; } }
+  .sales-form { display: grid; gap: 1rem; margin-top: 1rem; }
+  .form-row { display: flex; flex-direction: column; gap: 0.4rem; }
+  .account-type-indicator { margin-top: 0.2rem; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width: 600px) { .form-grid-2 { grid-template-columns: 1fr; } }
+  textarea { padding: 0.78rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--text); font: inherit; resize: vertical; }
+  textarea:focus { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); border-color: var(--blue); }
+  .input-hint { color: var(--muted); font-size: 0.72rem; font-weight: 400; margin-top: 0.2rem; display: block; }
+  .form-actions { display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 0.5rem; }
+  .notice.success { background: #dcfce7; color: #166534; border-left: 3px solid #22c55e; padding: 0.7rem; border-radius: 0 8px 8px 0; }
+  .dark-theme .notice.success { background: #14532d; color: #bbf7d0; border-left-color: #4ade80; }
+  .history-sidebar { max-height: 650px; display: flex; flex-direction: column; padding: 1.5rem; }
+  .history-sidebar-header { margin-bottom: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.75rem; }
+  .history-sidebar-header h3 { margin: 0 0 0.2rem; font-size: 1.15rem; }
+  .history-timeline { overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem; padding-right: 0.4rem; }
+  .history-card { padding: 0.85rem; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 0.84rem; }
+  .history-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+  .history-date { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+  .history-meta { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.78rem; color: var(--muted); }
+  .history-meta b { color: var(--text); font-weight: 600; }
+  .history-comments { margin: 0.5rem 0 0; padding-top: 0.4rem; border-top: 1px dashed var(--line); line-height: 1.4; }
+  .muted-state { text-align: center; padding: 2rem 1rem; color: var(--muted); }
+  .history-filter-card { padding: 1.25rem; margin-bottom: 1.25rem; display: grid; gap: 1rem; }
+  .history-filter-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem; }
+  .view-mode-toggle { display: flex; background: var(--soft); border-radius: 8px; padding: 3px; }
+  .view-mode-toggle button { border: 0; padding: 0.5rem 1rem; border-radius: 6px; background: transparent; color: var(--muted); font: 700 0.8rem system-ui; cursor: pointer; }
+  .view-mode-toggle button.active { background: var(--surface); color: var(--text); box-shadow: 0 2px 5px #0002; }
+  .history-filter-actions { display: flex; gap: 0.5rem; }
+  .history-filters-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; align-items: end; }
+  @media(max-width: 768px) { .history-filters-grid { grid-template-columns: 1fr; } }
+  .call-row { transition: background 0.15s ease; }
+  .call-row:hover { background: color-mix(in srgb,var(--blue) 5%,var(--surface)); }
+  .phone-link { color: var(--blue); text-decoration: none; font-weight: 600; }
+  .phone-link:hover { text-decoration: underline; }
+  .comments-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-group { display: flex; gap: 0.4rem; }
+  .form-card, .sales-admin-card { padding: 1.5rem; }
+  .sales-admin-card h2 { margin: 0 0 0.2rem; font-size: 1.25rem; }
+  .sales-admin-form { display: grid; gap: 0.8rem; margin-top: 1rem; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 1.25rem; }
+
   @media print {
     body, main, .viewer-layout { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
     header, .viewer-toolbar, .viewer-page-header, .actions, .theme, button { display: none !important; }
@@ -272,6 +826,51 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
 class AppComponent implements OnInit {
   private readonly http = inject(HttpClient); private readonly elementRef = inject(ElementRef);
   authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; menuOpen = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; loginMode: 'google' | 'password' = 'password'; email = ''; password = ''; currentPassword = ''; newPassword = ''; confirmPassword = ''; invoiceNumber = ''; customerName = ''; allCustomers: CustomerSummary[] = []; dateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)); dateTo = toDateInputValue(new Date()); today = toDateInputValue(new Date()); searchPerformed = false; invoices: Invoice[] = []; error = ''; selectedInvoiceKeys = new Set<string>(); emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
+
+  // Sales state
+  salesTab: 'scheduled' | 'new-call' | 'history' | 'admin' = 'scheduled';
+  salesReps: SalesRep[] = [];
+  salesCustomers: SalesCustomer[] = [];
+  filteredSalesCustomers: SalesCustomer[] = [];
+  adminAccountFilter = '';
+  adminRepFilter = '';
+  selectedSalesFilterRep = '';
+  scheduledCalls: SalesCall[] = [];
+  loadingScheduledCalls = false;
+  callHistory: SalesCall[] = [];
+  filteredCallHistory: SalesCall[] = [];
+  accountSummaries: AccountSummary[] = [];
+  filteredAccountSummaries: AccountSummary[] = [];
+  historyViewMode: 'records' | 'summary' = 'records';
+  historyDateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  historyDateTo = toDateInputValue(new Date());
+  historyAccountFilter = '';
+  loadingHistory = false;
+  newCall: SalesCall = {
+    accountName: '',
+    contactName: '',
+    phone: '',
+    comments: '',
+    repEmail: '',
+    repName: '',
+    status: 1,
+    callDate: toDateInputValue(new Date()),
+    followUpDate: ''
+  };
+  selectedCustomerHistory: SalesCall[] = [];
+  loadingCustomerHistory = false;
+  savingCall = false;
+  callSuccessMessage = '';
+  callErrorMessage = '';
+  completingCall: SalesCall | null = null;
+  completingComments = '';
+  completingFollowUpDate = '';
+  editingCall: SalesCall | null = null;
+  newSalesRep: SalesRep = { repName: '', repEmail: '' };
+  newCustomerName = '';
+  selectedAssignRepEmail = '';
+
+  get isSalesAdmin(): boolean { return this.roles.includes('SalesAdmin'); }
   
   // Viewer state
   isViewer = false;
@@ -295,6 +894,7 @@ class AppComponent implements OnInit {
       if (x.authenticated && !this.isViewer) {
         this.setDestination();
         if (this.destination === 'invoice') this.loadCustomers();
+        if (this.destination === 'sales') this.loadSalesData();
       }
     });
   }
@@ -427,7 +1027,7 @@ class AppComponent implements OnInit {
   initialTheme(): Theme { const stored = localStorage.getItem('theme'); return stored === 'dark' || stored === 'light' ? stored : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
   toggleTheme() { this.theme = this.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', this.theme); }
   setDestination() { const sales = this.roles.includes('SalesAdmin') || this.roles.includes('SalesUser'); const invoice = this.roles.some(role => ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser'].includes(role)); this.hasDualRoles = sales && invoice; this.canManageUsers = this.roles.some(role => ['InvoiceAdmin', 'SalesAdmin'].includes(role)); this.destination = this.mustChangePassword ? 'password-change' : this.hasDualRoles ? 'choose' : sales ? 'sales' : invoice ? 'invoice' : null; this.denied = this.destination === null; }
-  go(destination: Destination) { if (this.destination !== 'admin') this.previousWorkspace = this.destination; this.destination = destination; this.menuOpen = false; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') this.loadCustomers(); }
+  go(destination: Destination) { if (this.destination !== 'admin') this.previousWorkspace = this.destination; this.destination = destination; this.menuOpen = false; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') this.loadCustomers(); if (destination === 'sales') this.loadSalesData(); }
   switchView() { this.go(this.destination === 'sales' ? 'invoice' : 'sales'); }
   passwordLogin() { this.http.post('/auth/password-login', { email: this.email, password: this.password }).subscribe({ next: () => location.reload(), error: e => { this.denied = e.status === 403; this.error = this.denied ? '' : (e.error?.message || e.error || 'Unable to sign in.'); } }); }
   changePassword() { if (this.newPassword !== this.confirmPassword) { this.error = 'The new passwords do not match.'; return; } this.http.post('/auth/change-password', { currentPassword: this.currentPassword, newPassword: this.newPassword }).subscribe({ next: () => location.reload(), error: e => this.error = e.error?.message || 'Unable to update your password.' }); }
@@ -628,6 +1228,453 @@ class AppComponent implements OnInit {
         this.sendingEmails = false;
         this.emailError = e.error?.message || e.error || 'Unable to send emails.';
       }
+    });
+  }
+
+  // Sales Methods
+  getAccountName(c: any): string {
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    return c.customerName || c.accountName || c.name || '';
+  }
+
+  applyAdminAccountFilter() {
+    let list = [...this.salesCustomers];
+    const q = this.adminAccountFilter.trim().toLowerCase();
+    if (q) {
+      list = list.filter(c => this.getAccountName(c).toLowerCase().includes(q));
+    }
+    if (this.adminRepFilter) {
+      if (this.adminRepFilter === '__unassigned__') {
+        list = list.filter(c => !c.assignedSalesReps || !c.assignedSalesReps.length);
+      } else {
+        const filterRep = this.adminRepFilter.toLowerCase();
+        list = list.filter(c => (c.assignedSalesReps || []).some(r => r.toLowerCase() === filterRep));
+      }
+    }
+    this.filteredSalesCustomers = list;
+  }
+
+  loadSalesData() {
+    if (!this.allCustomers.length) {
+      this.loadCustomers();
+    }
+
+    this.http.get<any[]>('/api/sales/reps').subscribe({
+      next: reps => {
+        this.salesReps = (reps || []).map(r => {
+          if (typeof r === 'string') {
+            return { id: 0, repName: r, name: r, repEmail: r, email: r, status: 'A' };
+          }
+          const repName = r.repName || r.name || r.rep_name || '';
+          const repEmail = r.repEmail || r.email || r.rep_email || '';
+          return { ...r, repName, name: repName, repEmail, email: repEmail, status: r.status || 'A' };
+        });
+
+        if (!this.isSalesAdmin && this.currentUserEmail) {
+          this.selectedSalesFilterRep = this.currentUserEmail;
+          this.newCall.repEmail = this.currentUserEmail;
+        } else if (this.salesReps.length > 0 && !this.newCall.repEmail) {
+          const matching = this.salesReps.find(r => (r.repEmail || r.email || '').toLowerCase() === this.currentUserEmail);
+          this.newCall.repEmail = matching ? (matching.repEmail || matching.email || '') : (this.salesReps[0].repEmail || this.salesReps[0].email || '');
+        }
+        this.loadScheduledCalls();
+      },
+      error: () => this.loadScheduledCalls()
+    });
+
+    this.http.get<any[]>('/api/sales/customers').subscribe({
+      next: custs => {
+        this.salesCustomers = (custs || []).map(c => {
+          if (typeof c === 'string') {
+            return { customerNumber: 0, customerName: c, accountName: c, assignedSalesReps: [] };
+          }
+          const customerName = c.customerName || c.accountName || c.customer_name || c.name || '';
+          return {
+            ...c,
+            customerName,
+            accountName: customerName,
+            assignedSalesReps: Array.isArray(c.assignedSalesReps) ? c.assignedSalesReps : (Array.isArray(c.assigned_sales_reps) ? c.assigned_sales_reps : [])
+          };
+        });
+        this.applyAdminAccountFilter();
+      },
+      error: () => {
+        this.salesCustomers = [];
+        this.filteredSalesCustomers = [];
+      }
+    });
+  }
+
+  setSalesTab(tab: 'scheduled' | 'new-call' | 'history' | 'admin') {
+    this.salesTab = tab;
+    this.callSuccessMessage = '';
+    this.callErrorMessage = '';
+    if (tab === 'scheduled') {
+      this.loadScheduledCalls();
+    } else if (tab === 'history') {
+      this.loadCallHistory();
+    }
+  }
+
+  onFilterRepChange() {
+    if (this.salesTab === 'scheduled') {
+      this.loadScheduledCalls();
+    } else if (this.salesTab === 'history') {
+      this.loadCallHistory();
+    }
+  }
+
+  loadScheduledCalls() {
+    this.loadingScheduledCalls = true;
+    const params: Record<string, string> = {};
+    if (this.selectedSalesFilterRep) params['repEmail'] = this.selectedSalesFilterRep;
+    this.http.get<SalesCall[]>('/api/sales/calls/upcoming', { params }).subscribe({
+      next: calls => {
+        this.scheduledCalls = calls || [];
+        this.loadingScheduledCalls = false;
+      },
+      error: () => {
+        this.scheduledCalls = [];
+        this.loadingScheduledCalls = false;
+      }
+    });
+  }
+
+  onAccountNameChange() {
+    const name = (this.newCall.accountName || '').trim();
+    if (!name) {
+      this.selectedCustomerHistory = [];
+      return;
+    }
+    const matched = this.salesCustomers.find(c => (c.customerName || c.accountName || '').toLowerCase() === name.toLowerCase());
+    if (matched) {
+      if ((this.isSalesAdmin || !this.newCall.repEmail) && matched.assignedSalesReps && matched.assignedSalesReps.length > 0) {
+        this.newCall.repEmail = matched.assignedSalesReps[0];
+      }
+      this.newCall.isProspect = false;
+    } else {
+      this.newCall.isProspect = true;
+    }
+
+    this.loadingCustomerHistory = true;
+    this.http.get<SalesCall[]>(`/api/sales/calls/by-account?accountName=${encodeURIComponent(name)}`).subscribe({
+      next: history => {
+        this.selectedCustomerHistory = history || [];
+        this.loadingCustomerHistory = false;
+      },
+      error: () => {
+        this.selectedCustomerHistory = [];
+        this.loadingCustomerHistory = false;
+      }
+    });
+  }
+
+  isAccountProspect(accountName: string): boolean {
+    if (!accountName) return false;
+    return !this.salesCustomers.some(c => (c.customerName || c.accountName || '').toLowerCase() === accountName.trim().toLowerCase());
+  }
+
+  resetNewCallForm() {
+    const currentRep = (!this.isSalesAdmin && this.currentUserEmail)
+      ? this.currentUserEmail
+      : (this.salesReps[0]?.repEmail || this.salesReps[0]?.email || this.currentUserEmail || '');
+    this.newCall = {
+      accountName: '',
+      contactName: '',
+      phone: '',
+      comments: '',
+      repEmail: currentRep,
+      repName: '',
+      status: 1,
+      callDate: toDateInputValue(new Date()),
+      followUpDate: ''
+    };
+    this.selectedCustomerHistory = [];
+    this.callSuccessMessage = '';
+    this.callErrorMessage = '';
+  }
+
+  saveNewCall() {
+    if (!this.newCall.accountName.trim()) {
+      this.callErrorMessage = 'Account name is required.';
+      return;
+    }
+    this.savingCall = true;
+    this.callSuccessMessage = '';
+    this.callErrorMessage = '';
+
+    const rep = this.salesReps.find(r => (r.repEmail || r.email || '').toLowerCase() === (this.newCall.repEmail || '').toLowerCase());
+    if (rep) this.newCall.repName = rep.repName || rep.name || '';
+
+    this.http.post<SalesCall>('/api/sales/calls', this.newCall).subscribe({
+      next: () => {
+        this.savingCall = false;
+        this.callSuccessMessage = 'Call record saved successfully!';
+        const account = this.newCall.accountName;
+        this.resetNewCallForm();
+        this.newCall.accountName = account;
+        this.onAccountNameChange();
+        this.loadScheduledCalls();
+      },
+      error: err => {
+        this.savingCall = false;
+        this.callErrorMessage = err.error?.message || 'Failed to save call record.';
+      }
+    });
+  }
+
+  openCompleteModal(call: SalesCall) {
+    this.completingCall = call;
+    this.completingComments = call.comments || '';
+    this.completingFollowUpDate = call.followUpDate ? call.followUpDate.slice(0, 10) : '';
+  }
+
+  saveCompleteCall() {
+    if (!this.completingCall || (!this.completingCall.id && !this.completingCall.callID)) return;
+    const callId = this.completingCall.id || this.completingCall.callID;
+    const updated: SalesCall = {
+      ...this.completingCall,
+      status: 1,
+      comments: this.completingComments,
+      followUpDate: this.completingFollowUpDate || undefined
+    };
+    this.http.put(`/api/sales/calls/${callId}`, updated).subscribe({
+      next: () => {
+        this.completingCall = null;
+        this.loadScheduledCalls();
+      },
+      error: () => {}
+    });
+  }
+
+  openEditCall(call: SalesCall) {
+    this.editingCall = {
+      ...call,
+      phone: call.contactPhone || call.phone || '',
+      repEmail: call.salesRepEmail || call.repEmail || '',
+      callDate: call.callDate ? call.callDate.slice(0, 10) : toDateInputValue(new Date()),
+      followUpDate: call.followUpDate ? call.followUpDate.slice(0, 10) : ''
+    };
+  }
+
+  saveEditCall() {
+    if (!this.editingCall || (!this.editingCall.id && !this.editingCall.callID)) return;
+    const callId = this.editingCall.id || this.editingCall.callID;
+    this.http.put(`/api/sales/calls/${callId}`, this.editingCall).subscribe({
+      next: () => {
+        this.editingCall = null;
+        if (this.salesTab === 'scheduled') this.loadScheduledCalls();
+        if (this.salesTab === 'history') this.loadCallHistory();
+      },
+      error: () => {}
+    });
+  }
+
+  deleteCall(call: SalesCall) {
+    const callId = call.id || call.callID;
+    if (!callId || !confirm(`Delete call record for "${call.accountName}"?`)) return;
+    this.http.delete(`/api/sales/calls/${callId}`).subscribe({
+      next: () => {
+        if (this.salesTab === 'scheduled') this.loadScheduledCalls();
+        if (this.salesTab === 'history') this.loadCallHistory();
+      },
+      error: () => {}
+    });
+  }
+
+  loadCallHistory() {
+    this.loadingHistory = true;
+    const params: Record<string, string> = {};
+    if (this.selectedSalesFilterRep) params['salesRepEmail'] = this.selectedSalesFilterRep;
+
+    if (this.historyViewMode === 'records') {
+      if (this.historyDateFrom) params['fromDate'] = this.historyDateFrom;
+      if (this.historyDateTo) params['toDate'] = this.historyDateTo;
+      this.http.get<SalesCall[]>('/api/sales/calls', { params }).subscribe({
+        next: calls => {
+          this.callHistory = calls || [];
+          this.applyHistoryFilter();
+          this.loadingHistory = false;
+        },
+        error: () => {
+          this.callHistory = [];
+          this.filteredCallHistory = [];
+          this.loadingHistory = false;
+        }
+      });
+    } else {
+      this.http.get<AccountSummary[]>('/api/sales/calls/summary-by-account', { params }).subscribe({
+        next: summaries => {
+          this.accountSummaries = summaries || [];
+          this.applyHistoryFilter();
+          this.loadingHistory = false;
+        },
+        error: () => {
+          this.accountSummaries = [];
+          this.filteredAccountSummaries = [];
+          this.loadingHistory = false;
+        }
+      });
+    }
+  }
+
+  onHistoryAccountSearchChange() {
+    this.applyHistoryFilter();
+  }
+
+  applyHistoryFilter() {
+    const q = this.historyAccountFilter.trim().toLowerCase();
+    if (!q) {
+      this.filteredCallHistory = [...this.callHistory];
+      this.filteredAccountSummaries = [...this.accountSummaries];
+      return;
+    }
+    this.filteredCallHistory = this.callHistory.filter(c => (c.accountName || '').toLowerCase().includes(q) || (c.contactName || '').toLowerCase().includes(q));
+    this.filteredAccountSummaries = this.accountSummaries.filter(s => (s.accountName || '').toLowerCase().includes(q));
+  }
+
+  logCallForAccount(accountName: string) {
+    this.salesTab = 'new-call';
+    this.resetNewCallForm();
+    this.newCall.accountName = accountName;
+    this.onAccountNameChange();
+  }
+
+  exportHistoryCsv() {
+    const header = ['Account Name', 'Contact Name', 'Phone', 'Call Date', 'Follow-up Date', 'Sales Rep', 'Status', 'Is Prospect', 'Comments'];
+    const rows = this.filteredCallHistory.map(c => [
+      `"${(c.accountName || '').replace(/"/g, '""')}"`,
+      `"${(c.contactName || '').replace(/"/g, '""')}"`,
+      `"${(c.contactPhone || c.phone || '').replace(/"/g, '""')}"`,
+      `"${c.callDate ? c.callDate.slice(0, 10) : ''}"`,
+      `"${c.followUpDate ? c.followUpDate.slice(0, 10) : ''}"`,
+      `"${this.getRepDisplayName(c.repName, c.salesRepEmail || c.repEmail).replace(/"/g, '""')}"`,
+      `"${c.status === 1 ? 'Completed' : 'Scheduled'}"`,
+      `"${c.isProspect ? 'Yes' : 'No'}"`,
+      `"${(c.comments || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [header.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `sales_call_history_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  formatAssignedReps(c: any): string {
+    if (!c) return 'Unassigned';
+    const reps: string[] = typeof c === 'string' ? [] : (Array.isArray(c.assignedSalesReps) ? c.assignedSalesReps : (Array.isArray(c.assigned_sales_reps) ? c.assigned_sales_reps : []));
+    if (!reps || !reps.length) return 'Unassigned';
+    return reps.map(email => {
+      const rep = this.salesReps.find(r => (r.repEmail || r.email || '').toLowerCase() === email.toLowerCase());
+      return rep ? (rep.repName || rep.name || rep.repEmail || rep.email || email) : email;
+    }).join(', ');
+  }
+
+  getRepDisplayName(repName?: string, repEmail?: string): string {
+    if (repName && repName.trim()) return repName;
+    if (!repEmail) return '—';
+    const rep = this.salesReps.find(r => (r.repEmail || r.email || '').toLowerCase() === repEmail.toLowerCase());
+    return rep ? (rep.repName || rep.name || rep.repEmail || rep.email || repEmail) : repEmail;
+  }
+
+  printAccountList() {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const rows = this.salesCustomers.map(c => `<tr><td style="padding:8px;border-bottom:1px solid #ddd;"><b>${this.getAccountName(c)}</b></td><td style="padding:8px;border-bottom:1px solid #ddd;">${this.formatAssignedReps(c)}</td></tr>`).join('');
+    win.document.write(`
+      <html>
+        <head>
+          <title>Sales Accounts List - Allen & Kerber Auto Supply</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; color: #172033; }
+            table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+            th { text-align: left; padding: 8px; border-bottom: 2px solid #333; }
+            h1 { margin-bottom: 0.2rem; }
+            p { color: #666; margin-top: 0; }
+          </style>
+        </head>
+        <body>
+          <h1>Allen & Kerber Auto Supply</h1>
+          <p>Sales Customer Account Assignments &bull; Generated ${new Date().toLocaleDateString()}</p>
+          <table>
+            <thead><tr><th>Account Name</th><th>Assigned Sales Rep(s)</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
+  }
+
+  addSalesRep() {
+    const name = (this.newSalesRep.repName || this.newSalesRep.name || '').trim();
+    const email = (this.newSalesRep.repEmail || this.newSalesRep.email || '').trim();
+    if (!name || !email) return;
+    this.http.post<SalesRep>('/api/sales/reps', { repName: name, repEmail: email }).subscribe({
+      next: () => {
+        this.newSalesRep = { repName: '', repEmail: '' };
+        this.loadSalesData();
+      },
+      error: () => {}
+    });
+  }
+
+  deleteSalesRep(rep: SalesRep) {
+    const name = rep.repName || rep.name || '';
+    const email = rep.repEmail || rep.email || '';
+    if (!email || !confirm(`Remove sales representative "${name || email}"?`)) return;
+    this.http.delete(`/api/sales/reps/${encodeURIComponent(email)}`).subscribe({
+      next: () => {
+        this.loadSalesData();
+      },
+      error: () => {}
+    });
+  }
+
+  addSalesCustomer() {
+    const name = this.newCustomerName.trim();
+    if (!name) return;
+    this.http.post('/api/sales/customers', { customerName: name }).subscribe({
+      next: () => {
+        if (this.selectedAssignRepEmail) {
+          this.http.post('/api/sales/assignments', { customerName: name, repEmail: this.selectedAssignRepEmail }).subscribe({
+            next: () => {
+              this.newCustomerName = '';
+              this.selectedAssignRepEmail = '';
+              this.loadSalesData();
+            },
+            error: () => {
+              this.newCustomerName = '';
+              this.selectedAssignRepEmail = '';
+              this.loadSalesData();
+            }
+          });
+        } else {
+          this.newCustomerName = '';
+          this.selectedAssignRepEmail = '';
+          this.loadSalesData();
+        }
+      },
+      error: () => {}
+    });
+  }
+
+  deleteSalesCustomer(cust: any) {
+    const name = this.getAccountName(cust);
+    if (!name || !confirm(`Remove customer account "${name}"?`)) return;
+    this.http.delete(`/api/sales/customers/${encodeURIComponent(name)}`).subscribe({
+      next: () => {
+        this.loadSalesData();
+      },
+      error: () => {}
     });
   }
 }

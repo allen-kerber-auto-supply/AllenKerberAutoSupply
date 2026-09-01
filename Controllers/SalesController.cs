@@ -10,6 +10,17 @@ namespace AllenKerberAutoSupply.Controllers;
 [Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.SalesAdmin},{RoleNames.SalesUser}")]
 public sealed class SalesController(ISalesRepository repository) : ControllerBase
 {
+    private string GetEffectiveRepEmail(string? requestedRepEmail)
+    {
+        var currentUserEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
+        var isSalesAdmin = User.IsInRole(RoleNames.SalesAdmin);
+
+        if (!isSalesAdmin)
+            return currentUserEmail;
+
+        return requestedRepEmail ?? string.Empty;
+    }
+
     // Sales Reps
     [HttpGet("reps")]
     public async Task<IActionResult> GetSalesRepList(CancellationToken cancellationToken)
@@ -40,7 +51,8 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
     [HttpGet("customers")]
     public async Task<IActionResult> GetCustomerList([FromQuery] string? salesRepEmail, CancellationToken cancellationToken)
     {
-        return Ok(await repository.GetCustomerListAsync(salesRepEmail, cancellationToken));
+        var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
+        return Ok(await repository.GetSalesCustomersAsync(effectiveEmail, cancellationToken));
     }
 
     [HttpPost("customers")]
@@ -87,35 +99,119 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
     }
 
     [HttpGet("calls")]
-    public async Task<IActionResult> GetCallRecords([FromQuery] string salesRepEmail, [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, CancellationToken cancellationToken)
     {
-        return Ok(await repository.GetCallRecordsAsync(salesRepEmail, fromDate, toDate, cancellationToken));
+        var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
+        return Ok(await repository.GetCallRecordsAsync(effectiveEmail, fromDate, toDate, cancellationToken));
     }
 
     [HttpGet("calls/upcoming")]
-    public async Task<IActionResult> GetUpcomingCallRecords([FromQuery] string salesRepEmail, [FromQuery] DateTime fromDate, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetUpcomingCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, CancellationToken cancellationToken)
     {
-        return Ok(await repository.GetUpComingCallRecordsAsync(salesRepEmail, DateTime.UtcNow, fromDate, cancellationToken));
+        var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
+        return Ok(await repository.GetUpComingCallRecordsAsync(effectiveEmail, DateTime.UtcNow, fromDate, cancellationToken));
     }
 
     [HttpGet("calls/by-account")]
-    public async Task<IActionResult> GetCallsByAccount([FromQuery] string salesRepEmail, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetCallsByAccount([FromQuery] string? salesRepEmail, [FromQuery] string? accountName, CancellationToken cancellationToken)
     {
-        return Ok(await repository.GetCallsByAccountAsync(salesRepEmail, cancellationToken));
+        if (!string.IsNullOrWhiteSpace(accountName))
+        {
+            return Ok(await repository.GetCallRecordsForAccountAsync(accountName, cancellationToken));
+        }
+
+        var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
+        return Ok(await repository.GetCallsByAccountAsync(effectiveEmail, cancellationToken));
     }
 
     [HttpPost("calls")]
     public async Task<IActionResult> InsertCallRecord([FromBody] SalesCall call, CancellationToken cancellationToken)
     {
+        call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(call.SalesRepEmail))
+        {
+            call.SalesRepEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(call.Comments) && call.CallDateTime.HasValue && call.CallDateTime.Value <= DateTime.UtcNow)
+        {
+            call.Status = 1;
+        }
+
+        var followUpTimestamp = call.FollowUpDate;
         var success = await repository.InsertCallRecordAsync(call, cancellationToken);
+        if (success && followUpTimestamp.HasValue)
+        {
+            var followUpCall = new SalesCall
+            {
+                AccountName = call.AccountName,
+                CallDate = followUpTimestamp,
+                CallDuration = 0,
+                Comments = string.Empty,
+                FollowUpDate = null,
+                ContactName = call.ContactName,
+                ContactPhone = call.ContactPhone,
+                SalesRepId = call.SalesRepId,
+                SalesRepEmail = call.SalesRepEmail,
+                Status = 0,
+                IsProspect = call.IsProspect
+            };
+            await repository.InsertCallRecordAsync(followUpCall, cancellationToken);
+        }
+
         return success ? Ok(new { message = "Call record logged successfully." }) : Conflict("Call record already exists.");
     }
 
     [HttpPut("calls")]
     public async Task<IActionResult> UpdateCallRecord([FromBody] SalesCall call, CancellationToken cancellationToken)
     {
+        call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(call.SalesRepEmail))
+        {
+            call.SalesRepEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(call.Comments) && call.CallDateTime.HasValue && call.CallDateTime.Value <= DateTime.UtcNow)
+        {
+            call.Status = 1;
+        }
+
+        var followUpTimestamp = call.FollowUpDate;
         var success = await repository.UpdateCallRecordAsync(call, cancellationToken);
+        if (success && followUpTimestamp.HasValue)
+        {
+            var followUpCall = new SalesCall
+            {
+                AccountName = call.AccountName,
+                CallDate = followUpTimestamp,
+                CallDuration = 0,
+                Comments = string.Empty,
+                FollowUpDate = null,
+                ContactName = call.ContactName,
+                ContactPhone = call.ContactPhone,
+                SalesRepId = call.SalesRepId,
+                SalesRepEmail = call.SalesRepEmail,
+                Status = 0,
+                IsProspect = call.IsProspect
+            };
+            await repository.InsertCallRecordAsync(followUpCall, cancellationToken);
+        }
+
         return success ? Ok(new { message = "Call record updated successfully." }) : NotFound("Call record not found.");
+    }
+
+    [HttpPut("calls/{callId:int}")]
+    public async Task<IActionResult> UpdateCallRecordById(int callId, [FromBody] SalesCall call, CancellationToken cancellationToken)
+    {
+        call.CallID = callId;
+        return await UpdateCallRecord(call, cancellationToken);
+    }
+
+    [HttpDelete("calls/{callId:int}")]
+    public async Task<IActionResult> DeleteCallRecord(int callId, CancellationToken cancellationToken)
+    {
+        var success = await repository.DeleteCallRecordAsync(callId, cancellationToken);
+        return success ? Ok(new { message = "Call record deleted successfully." }) : NotFound("Call record not found.");
     }
 }
 
