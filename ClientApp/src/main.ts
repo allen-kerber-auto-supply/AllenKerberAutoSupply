@@ -826,7 +826,16 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   .dark-theme .status-badge.prospect { background: #78350f; color: #fde68a; margin-left: 0.3rem; }
   .status-badge.customer { background: #dbeafe; color: #1e40af; }
   .dark-theme .status-badge.customer { background: #1e3a8a; color: #bfdbfe; }
-  .new-call-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; align-items: start; }.call-record-list { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }.call-record-card { flex: 1 1 280px; min-width: 250px; max-width: 100%; display: flex; flex-direction: column; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04); cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }.call-record-card:hover { transform: translateY(-2px); border-color: var(--blue); box-shadow: 0 12px 24px rgba(24, 90, 219, 0.12); }.call-record-card:focus-visible { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); outline-offset: 2px; }.call-record-header { display: flex; flex-direction: column; gap: .5rem; }.status-stack { display: flex; flex-wrap: wrap; gap: .35rem; }.call-record-header h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; }.call-record-meta { display: grid; grid-template-columns: minmax(90px, 120px) 1fr; gap: .5rem .75rem; }.call-record-row { display: contents; }.call-record-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; align-self: center; }.call-record-value { color: var(--text); font-size: .88rem; line-height: 1.45; word-break: break-word; }.comments-row .call-record-value { display: block; min-height: 1.2em; }.call-record-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; }.call-detail-modal { width: min(760px, 92vw); max-height: 88vh; overflow: auto; padding: 1.5rem; }.call-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }.call-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.call-detail-item { display: grid; gap: .35rem; padding: .8rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }.call-detail-item.full-width { grid-column: 1 / -1; }.call-detail-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.call-detail-value { color: var(--text); font-size: .9rem; line-height: 1.45; word-break: break-word; }
+  .new-call-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  .form-card { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
+  .sales-form { display: grid; gap: 1rem; width: 100%; max-width: 100%; }
+  .sales-form label,
+  .sales-form input,
+  .sales-form select,
+  .sales-form textarea,
+  .sales-form button,
+  .sales-form .form-grid-2 { width: 100%; max-width: 100%; box-sizing: border-box; }
+  .call-record-list { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }.call-record-card { flex: 1 1 280px; min-width: 250px; max-width: 100%; display: flex; flex-direction: column; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04); cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }.call-record-card:hover { transform: translateY(-2px); border-color: var(--blue); box-shadow: 0 12px 24px rgba(24, 90, 219, 0.12); }.call-record-card:focus-visible { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); outline-offset: 2px; }.call-record-header { display: flex; flex-direction: column; gap: .5rem; }.status-stack { display: flex; flex-wrap: wrap; gap: .35rem; }.call-record-header h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; }.call-record-meta { display: grid; grid-template-columns: minmax(90px, 120px) 1fr; gap: .5rem .75rem; }.call-record-row { display: contents; }.call-record-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; align-self: center; }.call-record-value { color: var(--text); font-size: .88rem; line-height: 1.45; word-break: break-word; }.comments-row .call-record-value { display: block; min-height: 1.2em; }.call-record-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; }.call-detail-modal { width: min(760px, 92vw); max-height: 88vh; overflow: auto; padding: 1.5rem; }.call-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }.call-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.call-detail-item { display: grid; gap: .35rem; padding: .8rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }.call-detail-item.full-width { grid-column: 1 / -1; }.call-detail-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.call-detail-value { color: var(--text); font-size: .9rem; line-height: 1.45; word-break: break-word; }
   @media(max-width: 900px) { .new-call-layout { grid-template-columns: 1fr; } }
   .sales-form { display: grid; gap: 1rem; margin-top: 1rem; }
   .form-row { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -879,8 +888,16 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   .comments-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .btn-group { display: flex; gap: 0.4rem; }
   .form-card, .sales-admin-card { padding: 1.5rem; }
+  .sales-admin-card { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
   .sales-admin-card h2 { margin: 0 0 0.2rem; font-size: 1.25rem; }
   .sales-admin-form { display: grid; gap: 0.8rem; margin-top: 1rem; }
+  .sales-admin-form label,
+  .sales-admin-form input,
+  .sales-admin-form select,
+  .sales-admin-form button,
+  .admin-table-filters input,
+  .admin-table-filters select { width: 100%; max-width: 100%; box-sizing: border-box; }
+  @media(max-width:980px){.admin-grid,.new-call-layout{grid-template-columns:1fr}} 
   .modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 1.25rem; }
 
   @media print {
