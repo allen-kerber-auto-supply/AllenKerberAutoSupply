@@ -112,3 +112,13 @@ public sealed class AccountCallsSummary
     public DateTime? LatestCall { get; set; }
     public bool IsProspect { get; set; }
 }
+
+public sealed class AccountSummaryResponse
+{
+    public string AccountName { get; set; } = string.Empty;
+    public int TotalCalls { get; set; }
+    public int CompletedCalls { get; set; }
+    public int ScheduledCalls { get; set; }
+    public DateTime? LastCallDate { get; set; }
+    public List<SalesCall> Calls { get; set; } = [];
+}

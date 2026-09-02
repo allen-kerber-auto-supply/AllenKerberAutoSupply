@@ -55,6 +55,18 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
         return Ok(await repository.GetSalesCustomersAsync(effectiveEmail, cancellationToken));
     }
 
+    [HttpGet("customers/unassigned")]
+    public async Task<IActionResult> GetUnassignedCustomerList(CancellationToken cancellationToken)
+    {
+        var customers = await repository.GetSalesCustomersAsync(null, cancellationToken);
+        var unassigned = customers
+            .Where(c => c.AssignedSalesReps == null || c.AssignedSalesReps.Count == 0)
+            .OrderBy(c => c.CustomerName)
+            .ToList();
+
+        return Ok(unassigned);
+    }
+
     [HttpPost("customers")]
     [Authorize(Roles = RoleNames.SalesAdmin)]
     public async Task<IActionResult> InsertSalesCustomer([FromBody] CreateSalesCustomerRequest request, CancellationToken cancellationToken)
@@ -122,6 +134,13 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
 
         var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
         return Ok(await repository.GetCallsByAccountAsync(effectiveEmail, cancellationToken));
+    }
+
+    [HttpGet("calls/summary-by-account")]
+    public async Task<IActionResult> GetAccountSummary([FromQuery] string? salesRepEmail, CancellationToken cancellationToken)
+    {
+        var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
+        return Ok(await repository.GetAccountSummaryAsync(effectiveEmail, cancellationToken));
     }
 
     [HttpPost("calls")]

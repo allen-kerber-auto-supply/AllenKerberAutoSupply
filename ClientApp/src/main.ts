@@ -36,6 +36,7 @@ interface AccountSummary {
   lastCallDate?: string;
   scheduledCalls: number;
   completedCalls: number;
+  calls?: SalesCall[];
 }
 type Destination = 'invoice' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
 type Theme = 'light' | 'dark';
@@ -173,42 +174,33 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
             </div>
           </div>
           <div *ngIf="loadingScheduledCalls" class="state"><p>Loading scheduled calls...</p></div>
-          <div *ngIf="!loadingScheduledCalls && scheduledCalls.length" class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Account</th>
-                  <th>Contact</th>
-                  <th>Phone</th>
-                  <th>Call Date</th>
-                  <th>Rep</th>
-                  <th>Comments</th>
-                  <th class="action-cell">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let call of scheduledCalls" class="call-row">
-                  <td>
-                    <span class="status-badge scheduled">Scheduled</span>
-                    <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
-                  </td>
-                  <td><b>{{call.accountName}}</b></td>
-                  <td>{{call.contactName || '—'}}</td>
-                  <td><a *ngIf="call.contactPhone || call.phone" [href]="'tel:' + (call.contactPhone || call.phone)" class="phone-link">{{call.contactPhone || call.phone}}</a><span *ngIf="!call.contactPhone && !call.phone">—</span></td>
-                  <td><b>{{(call.callDate || call.followUpDate || call.createdDate) | date:'M/d/yyyy'}}</b></td>
-                  <td>{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</td>
-                  <td class="comments-cell" [title]="call.comments || ''">{{call.comments || '—'}}</td>
-                  <td class="action-cell">
-                    <div class="btn-group">
-                      <button class="button primary view-btn" type="button" (click)="openCompleteModal(call)">Complete</button>
-                      <button class="button secondary view-btn" type="button" (click)="openEditCall(call)">Edit</button>
-                      <button class="button danger view-btn" type="button" (click)="deleteCall(call)">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div *ngIf="!loadingScheduledCalls && scheduledCalls.length" class="call-record-list">
+            <article *ngFor="let call of scheduledCalls" class="call-record-card" role="button" tabindex="0" (click)="openCallDetails(call)" (keydown)="onCallCardKeydown($event, call)">
+              <div class="call-record-header">
+                <div class="status-stack">
+                  <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">{{call.status===1 ? 'Completed' : 'Scheduled'}}</span>
+                  <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
+                </div>
+                <h3>{{call.accountName}}</h3>
+              </div>
+
+              <div class="call-record-meta">
+                <div class="call-record-row">
+                  <span class="call-record-label">Call Date</span>
+                  <span class="call-record-value"><b>{{(call.callDate || call.followUpDate || call.createdDate) | date:'M/d/yyyy'}}</b></span>
+                </div>
+                <div class="call-record-row">
+                  <span class="call-record-label">Rep</span>
+                  <span class="call-record-value">{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span>
+                </div>
+              </div>
+
+              <div class="call-record-actions">
+                <button class="button primary view-btn" type="button" (click)="$event.stopPropagation(); openCompleteModal(call)">Complete</button>
+                <button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); openEditCall(call)">Edit</button>
+                <button *ngIf="isSalesAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteCall(call)">Delete</button>
+              </div>
+            </article>
           </div>
           <div *ngIf="!loadingScheduledCalls && !scheduledCalls.length" class="state">
             <p>No scheduled calls found for the selected filter.</p>
@@ -345,7 +337,10 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
               </label>
             </div>
             <label>Account Search
-              <input [(ngModel)]="historyAccountFilter" placeholder="Filter by account name..." (input)="onHistoryAccountSearchChange()">
+              <input [(ngModel)]="historyAccountFilter" list="historyAccountOptions" placeholder="Filter by account name..." (input)="onHistoryAccountSearchChange()">
+              <datalist id="historyAccountOptions">
+                <option *ngFor="let accountName of callHistoryAccountOptions" [value]="accountName"></option>
+              </datalist>
             </label>
             <label *ngIf="isSalesAdmin">Sales Rep Filter
               <select [(ngModel)]="selectedSalesFilterRep" (change)="loadCallHistory()">
@@ -362,80 +357,95 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
             <h2>{{filteredCallHistory.length}} Call Record{{filteredCallHistory.length===1?'':'s'}}</h2>
           </div>
           <div *ngIf="loadingHistory" class="state"><p>Loading call history...</p></div>
-          <div *ngIf="!loadingHistory && filteredCallHistory.length" class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Account</th>
-                  <th>Contact</th>
-                  <th>Phone</th>
-                  <th>Call Date</th>
-                  <th>Follow-up</th>
-                  <th>Rep</th>
-                  <th>Comments</th>
-                  <th class="action-cell">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let call of filteredCallHistory" class="call-row">
-                  <td>
-                    <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">
-                      {{call.status===1 ? 'Completed' : 'Scheduled'}}
-                    </span>
-                    <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
-                  </td>
-                  <td><b>{{call.accountName}}</b></td>
-                  <td>{{call.contactName || '—'}}</td>
-                  <td><a *ngIf="call.contactPhone || call.phone" [href]="'tel:' + (call.contactPhone || call.phone)" class="phone-link">{{call.contactPhone || call.phone}}</a><span *ngIf="!call.contactPhone && !call.phone">—</span></td>
-                  <td>{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</td>
-                  <td>{{call.followUpDate ? (call.followUpDate | date:'M/d/yyyy') : '—'}}</td>
-                  <td>{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</td>
-                  <td class="comments-cell" [title]="call.comments || ''">{{call.comments || '—'}}</td>
-                  <td class="action-cell">
-                    <div class="btn-group">
-                      <button class="button secondary view-btn" type="button" (click)="openEditCall(call)">Edit</button>
-                      <button class="button danger view-btn" type="button" (click)="deleteCall(call)">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div *ngIf="!loadingHistory && filteredCallHistory.length" class="call-record-list">
+            <article *ngFor="let call of filteredCallHistory" class="call-record-card" role="button" tabindex="0" (click)="openCallDetails(call)" (keydown)="onCallCardKeydown($event, call)">
+              <div class="call-record-header">
+                <div class="status-stack">
+                  <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">
+                    {{call.status===1 ? 'Completed' : 'Scheduled'}}
+                  </span>
+                  <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
+                </div>
+                <h3>{{call.accountName}}</h3>
+              </div>
+
+              <div class="call-record-meta">
+                <div class="call-record-row">
+                  <span class="call-record-label">Call Date</span>
+                  <span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span>
+                </div>
+                <div class="call-record-row">
+                  <span class="call-record-label">Rep</span>
+                  <span class="call-record-value">{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span>
+                </div>
+              </div>
+
+              <div class="call-record-actions">
+                <button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); openEditCall(call)">Edit</button>
+                <button *ngIf="isSalesAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteCall(call)">Delete</button>
+              </div>
+            </article>
           </div>
           <div *ngIf="!loadingHistory && !filteredCallHistory.length" class="state"><p>No call records found matching criteria.</p></div>
         </div>
 
-        <!-- ACCOUNT SUMMARY TABLE -->
+        <!-- ACCOUNT SUMMARY CARDS -->
         <div *ngIf="historyViewMode==='summary'" class="card table">
           <div class="table-header-row">
             <h2>Account Calls Summary ({{filteredAccountSummaries.length}} Accounts)</h2>
           </div>
           <div *ngIf="loadingHistory" class="state"><p>Loading summaries...</p></div>
-          <div *ngIf="!loadingHistory && filteredAccountSummaries.length" class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Account Name</th>
-                  <th>Total Calls</th>
-                  <th>Completed Calls</th>
-                  <th>Scheduled Calls</th>
-                  <th>Last Call Date</th>
-                  <th class="action-cell">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let s of filteredAccountSummaries">
-                  <td><b>{{s.accountName}}</b></td>
-                  <td><b>{{s.totalCalls}}</b></td>
-                  <td><span class="status-badge completed">{{s.completedCalls}}</span></td>
-                  <td><span class="status-badge scheduled">{{s.scheduledCalls}}</span></td>
-                  <td>{{s.lastCallDate ? (s.lastCallDate | date:'M/d/yyyy') : '—'}}</td>
-                  <td class="action-cell">
-                    <button class="button primary view-btn" type="button" (click)="logCallForAccount(s.accountName)">Log Call</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div *ngIf="!loadingHistory && filteredAccountSummaries.length" class="account-summary-panel">
+            <div class="account-summary-list">
+              <article *ngFor="let s of filteredAccountSummaries" class="account-summary-card" role="button" tabindex="0" (click)="selectAccountSummary(s)" (keydown)="onSummaryCardKeydown($event, s)">
+                <div class="account-summary-top">
+                  <h3>{{s.accountName}}</h3>
+                  <span class="status-badge completed">{{s.totalCalls}} total</span>
+                </div>
+                <div class="summary-metrics">
+                  <div><span>Completed</span><b>{{s.completedCalls}}</b></div>
+                  <div><span>Scheduled</span><b>{{s.scheduledCalls}}</b></div>
+                  <div><span>Last</span><b>{{s.lastCallDate ? (s.lastCallDate | date:'M/d/yyyy') : '—'}}</b></div>
+                </div>
+              </article>
+            </div>
+
+            <div *ngIf="selectedSummaryAccount" class="account-summary-detail">
+              <div class="account-summary-detail-header">
+                <h3>{{selectedSummaryAccount}}</h3>
+                <button class="button secondary view-btn" type="button" (click)="clearSelectedSummaryAccount()">Close</button>
+              </div>
+              <div *ngIf="selectedAccountSummaryCalls.length" class="call-record-list">
+                <article *ngFor="let call of selectedAccountSummaryCalls" class="call-record-card" role="button" tabindex="0" (click)="openCallDetails(call)" (keydown)="onCallCardKeydown($event, call)">
+                  <div class="call-record-header">
+                    <div class="status-stack">
+                      <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">
+                        {{call.status===1 ? 'Completed' : 'Scheduled'}}
+                      </span>
+                      <span *ngIf="call.isProspect" class="status-badge prospect">Prospect</span>
+                    </div>
+                    <h3>{{call.accountName}}</h3>
+                  </div>
+
+                  <div class="call-record-meta">
+                    <div class="call-record-row">
+                      <span class="call-record-label">Call Date</span>
+                      <span class="call-record-value"><b>{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</b></span>
+                    </div>
+                    <div class="call-record-row">
+                      <span class="call-record-label">Rep</span>
+                      <span class="call-record-value">{{getRepDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span>
+                    </div>
+                  </div>
+
+                  <div class="call-record-actions">
+                    <button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); openEditCall(call)">Edit</button>
+                    <button *ngIf="isSalesAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteCall(call)">Delete</button>
+                  </div>
+                </article>
+              </div>
+              <div *ngIf="!selectedAccountSummaryCalls.length" class="state"><p>No calls found for this account.</p></div>
+            </div>
           </div>
           <div *ngIf="!loadingHistory && !filteredAccountSummaries.length" class="state"><p>No accounts found.</p></div>
         </div>
@@ -481,11 +491,11 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
 
           <form (ngSubmit)="addSalesCustomer()" class="sales-admin-form">
             <label>Account Name
-              <input [(ngModel)]="newCustomerName" name="custAccountName" required list="adminAccountSuggestions" placeholder="Acme Auto Body">
-              <datalist id="adminAccountSuggestions">
-                <option *ngFor="let c of salesCustomers" [value]="getAccountName(c)"></option>
-                <option *ngFor="let c of allCustomers" [value]="c.customerName"></option>
-              </datalist>
+              <select [(ngModel)]="newCustomerName" name="custAccountName" required>
+                <option value="" disabled>Select an unassigned customer</option>
+                <option *ngIf="!unassignedCustomerOptions.length" value="" disabled>No unassigned customers available</option>
+                <option *ngFor="let customer of unassignedCustomerOptions" [value]="customer.customerName">{{customer.customerName}}</option>
+              </select>
             </label>
             <label>Assigned Sales Rep
               <select [(ngModel)]="selectedAssignRepEmail" name="custRepEmail" required>
@@ -493,7 +503,8 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
                 <option *ngFor="let r of salesReps" [value]="r.repEmail || r.email">{{r.repName || r.name || r.repEmail || r.email}} ({{r.repEmail || r.email}})</option>
               </select>
             </label>
-            <button class="button primary" type="submit">Assign Account</button>
+            <button class="button primary" type="submit" [disabled]="!unassignedCustomerOptions.length">Assign Account</button>
+            <p *ngIf="accountAssignmentMessage" class="alert">{{accountAssignmentMessage}}</p>
           </form>
 
           <div class="admin-table-filters" style="display: flex; gap: 0.5rem; margin-top: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
@@ -594,6 +605,64 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
       </form>
     </div>
 
+    <div *ngIf="selectedCallDetails" class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
+      <div class="card call-detail-modal" role="dialog" aria-modal="true" aria-labelledby="call-detail-title">
+        <div class="call-detail-header">
+          <div>
+            <p class="eyebrow">Call Details</p>
+            <h2 id="call-detail-title">{{selectedCallDetails.accountName}}</h2>
+          </div>
+          <button class="button secondary" type="button" (click)="closeCallDetails()">Close</button>
+        </div>
+
+        <div class="call-detail-grid">
+          <div class="call-detail-item">
+            <span class="call-detail-label">Status</span>
+            <span class="status-badge" [class.completed]="selectedCallDetails.status===1" [class.scheduled]="selectedCallDetails.status===0">
+              {{selectedCallDetails.status===1 ? 'Completed' : 'Scheduled'}}
+            </span>
+            <span *ngIf="selectedCallDetails.isProspect" class="status-badge prospect">Prospect</span>
+          </div>
+          <div class="call-detail-item">
+            <span class="call-detail-label">Customer</span>
+            <span class="call-detail-value">{{selectedCallDetails.accountName || '—'}}</span>
+          </div>
+          <div class="call-detail-item">
+            <span class="call-detail-label">Contact</span>
+            <span class="call-detail-value">{{selectedCallDetails.contactName || '—'}}</span>
+          </div>
+          <div class="call-detail-item">
+            <span class="call-detail-label">Phone</span>
+            <span class="call-detail-value">
+              <a *ngIf="selectedCallDetails.contactPhone || selectedCallDetails.phone" [href]="'tel:' + (selectedCallDetails.contactPhone || selectedCallDetails.phone)" class="phone-link">{{selectedCallDetails.contactPhone || selectedCallDetails.phone}}</a>
+              <span *ngIf="!selectedCallDetails.contactPhone && !selectedCallDetails.phone">—</span>
+            </span>
+          </div>
+          <div class="call-detail-item">
+            <span class="call-detail-label">Call Date</span>
+            <span class="call-detail-value">{{(selectedCallDetails.callDate || selectedCallDetails.createdDate) | date:'M/d/yyyy'}}</span>
+          </div>
+          <div class="call-detail-item">
+            <span class="call-detail-label">Follow-up</span>
+            <span class="call-detail-value">{{selectedCallDetails.followUpDate ? (selectedCallDetails.followUpDate | date:'M/d/yyyy') : '—'}}</span>
+          </div>
+          <div class="call-detail-item full-width">
+            <span class="call-detail-label">Rep</span>
+            <span class="call-detail-value">{{getRepDisplayName(selectedCallDetails.repName, selectedCallDetails.salesRepEmail || selectedCallDetails.repEmail)}}</span>
+          </div>
+          <div class="call-detail-item full-width">
+            <span class="call-detail-label">Comments</span>
+            <span class="call-detail-value">{{selectedCallDetails.comments || '—'}}</span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="button secondary" type="button" (click)="closeCallDetails()">Close</button>
+          <button class="button primary" type="button" (click)="openEditCall(selectedCallDetails); closeCallDetails()">Edit</button>
+        </div>
+      </div>
+    </div>
+
     <section *ngIf="authenticated && destination==='invoice'" class="workspace invoice-workspace">
       <div class="invoice-layout">
         <div class="invoice-search-col">
@@ -688,7 +757,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
     </div>
   </div>`,
   styles: [`
-  main,.viewer-layout,.modal-backdrop{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;min-height:100vh;color:var(--text)}main{padding:0 5vw 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme,.modal-backdrop.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace{max-width:1180px;margin:auto}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}.auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:8vw;padding:4rem 4vw}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;margin:7rem auto;padding:0 1.25rem}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem 4vw}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}.invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:4vw;padding-right:4vw}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:4vw;padding-right:4vw}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}.invoice-search-col{align-self:start}.invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem}.search-group{display:grid;gap:.8rem}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem}.table-scroll table{margin-top:0}.select-cell{width:2.2rem;text-align:center}.select-cell input{width:auto}.table-header-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.email-modal{width:min(560px,100%);max-height:80vh;overflow:auto}.email-group{display:grid;gap:.6rem;padding:1rem 0;border-top:1px solid var(--line)}.email-group:first-of-type{border-top:0;padding-top:0}.email-group h3{margin:0;font-size:1rem}.email-group h3 small{color:var(--muted);font-weight:400}.email-checklist{display:flex;flex-wrap:wrap;gap:.2rem .8rem}.muted-note{color:var(--muted);font-size:.82rem;margin:0}.email-results p{margin:.3rem 0;font-size:.85rem}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}  .notice{margin:0;font-size:.8rem}.modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:1100;min-height:auto}.modal{width:min(450px,100%)}.modal>div{display:flex;justify-content:end;gap:.6rem}
+  main,.viewer-layout,.modal-backdrop{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;min-height:100vh;color:var(--text)}main{padding:0 5vw 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme,.modal-backdrop.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace{max-width:1180px;margin:auto}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}.auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:8vw;padding:4rem 4vw}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;margin:7rem auto;padding:0 1.25rem}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem 4vw}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}.invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:4vw;padding-right:4vw}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:4vw;padding-right:4vw}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}.invoice-search-col{align-self:start}.invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem}.search-group{display:grid;gap:.8rem}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem}.table-scroll table{margin-top:0}.select-cell{width:2.2rem;text-align:center}.select-cell input{width:auto}.table-header-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.email-modal{width:min(560px,100%);max-height:80vh;overflow:auto}.email-group{display:grid;gap:.6rem;padding:1rem 0;border-top:1px solid var(--line)}.email-group:first-of-type{border-top:0;padding-top:0}.email-group h3{margin:0;font-size:1rem}.email-group h3 small{color:var(--muted);font-weight:400}.email-checklist{display:flex;flex-wrap:wrap;gap:.2rem .8rem}.muted-note{color:var(--muted);font-size:.82rem;margin:0}.email-results p{margin:.3rem 0;font-size:.85rem}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}  .notice{margin:0;font-size:.8rem}  .modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:1100;min-height:auto;overflow-y:auto}.modal{width:min(450px,100%);max-height:calc(100vh - 2rem);overflow:auto}.modal>div{display:flex;justify-content:end;gap:.6rem}.modal label,.modal input,.modal textarea,.modal select,.modal .form-grid-2{width:100%;max-width:100%}.modal .form-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.modal input,.modal textarea,.modal select{min-width:0;box-sizing:border-box}.modal textarea{width:100%}
 
   /* INVOICE VIEWER STYLES */
   .viewer-layout { min-height: 100vh; background: #1e293b; color: #0f172a; }
@@ -727,7 +796,18 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* SALES WORKSPACE STYLES */
-  .sales-workspace { max-width: 1280px; margin: auto; }
+  .sales-workspace { max-width: 1280px; margin: auto; padding-top: 1.5rem; }
+  .sales-workspace .heading { margin: 0 0 1.25rem; }
+  .sales-workspace .heading > div:first-child h1,
+  .sales-workspace .heading h1 {
+    font-size: 1.8rem !important;
+    line-height: 1.12 !important;
+    letter-spacing: -0.04em !important;
+    margin: 0 !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-weight: 700 !important;
+  }
+  .sales-workspace .heading p:not(.eyebrow) { font-size: 0.92rem; margin-top: 0.4rem; }
   .sales-actions-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
   .rep-filter-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
   .rep-filter-label select, select { padding: 0.65rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--text); font: inherit; }
@@ -746,7 +826,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   .dark-theme .status-badge.prospect { background: #78350f; color: #fde68a; margin-left: 0.3rem; }
   .status-badge.customer { background: #dbeafe; color: #1e40af; }
   .dark-theme .status-badge.customer { background: #1e3a8a; color: #bfdbfe; }
-  .new-call-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; align-items: start; }
+  .new-call-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; align-items: start; }.call-record-list { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }.call-record-card { flex: 1 1 280px; min-width: 250px; max-width: 100%; display: flex; flex-direction: column; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04); cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }.call-record-card:hover { transform: translateY(-2px); border-color: var(--blue); box-shadow: 0 12px 24px rgba(24, 90, 219, 0.12); }.call-record-card:focus-visible { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); outline-offset: 2px; }.call-record-header { display: flex; flex-direction: column; gap: .5rem; }.status-stack { display: flex; flex-wrap: wrap; gap: .35rem; }.call-record-header h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; }.call-record-meta { display: grid; grid-template-columns: minmax(90px, 120px) 1fr; gap: .5rem .75rem; }.call-record-row { display: contents; }.call-record-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; align-self: center; }.call-record-value { color: var(--text); font-size: .88rem; line-height: 1.45; word-break: break-word; }.comments-row .call-record-value { display: block; min-height: 1.2em; }.call-record-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; }.call-detail-modal { width: min(760px, 92vw); max-height: 88vh; overflow: auto; padding: 1.5rem; }.call-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }.call-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.call-detail-item { display: grid; gap: .35rem; padding: .8rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }.call-detail-item.full-width { grid-column: 1 / -1; }.call-detail-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.call-detail-value { color: var(--text); font-size: .9rem; line-height: 1.45; word-break: break-word; }
   @media(max-width: 900px) { .new-call-layout { grid-template-columns: 1fr; } }
   .sales-form { display: grid; gap: 1rem; margin-top: 1rem; }
   .form-row { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -780,6 +860,20 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   @media(max-width: 768px) { .history-filters-grid { grid-template-columns: 1fr; } }
   .call-row { transition: background 0.15s ease; }
   .call-row:hover { background: color-mix(in srgb,var(--blue) 5%,var(--surface)); }
+  .account-summary-panel { display: grid; gap: 1rem; margin-top: 1rem; }
+  .account-summary-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .account-summary-card { display: grid; gap: .8rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
+  .account-summary-card:hover { transform: translateY(-2px); border-color: var(--blue); }
+  .account-summary-card:focus-visible { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); outline-offset: 2px; }
+  .account-summary-top { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+  .account-summary-top h3 { margin: 0; font-size: 1.05rem; }
+  .summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+  .summary-metrics div { display: grid; gap: .2rem; padding: .55rem .5rem; border-radius: 8px; background: rgba(15, 23, 42, 0.02); }
+  .summary-metrics span { font-size: .66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .summary-metrics b { font-size: .9rem; }
+  .account-summary-detail { display: grid; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: rgba(24, 90, 219, 0.02); }
+  .account-summary-detail-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .account-summary-detail-header h3 { margin: 0; }
   .phone-link { color: var(--blue); text-decoration: none; font-weight: 600; }
   .phone-link:hover { text-decoration: underline; }
   .comments-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -821,7 +915,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
     }
   }
 
-  @media(max-width:760px){main{padding:0 1.2rem 2.5rem}header{height:72px}.menu>button span,.theme{font-size:.72rem}.auth-layout,.grid,.admin-grid,.search,.invoice-layout,.date-range{grid-template-columns:1fr}.auth-layout{gap:2rem;padding:3rem 0}.workspace{padding:2.5rem 0}.heading{align-items:start;flex-direction:column}.user-row{align-items:start;flex-direction:column}.user-row-actions{width:100%}.user-row-actions .button{flex:1}.invoice-mode{height:auto;overflow:visible}.invoice-workspace{padding-left:0;padding-right:0}.table-scroll{max-height:60vh}}`]
+  @media(max-width:760px){main{padding:0 1.2rem 2.5rem}header{height:72px}.menu>button span,.theme{font-size:.72rem}.auth-layout,.grid,.admin-grid,.search,.invoice-layout,.date-range{grid-template-columns:1fr}.auth-layout{gap:2rem;padding:3rem 0}.workspace{padding:2.5rem 0}.sales-workspace{padding-top:1rem}.heading{align-items:start;flex-direction:column}.sales-workspace .heading{margin-bottom:1rem}.sales-workspace .heading > div:first-child h1,.sales-workspace .heading h1{font-size:1.55rem !important;letter-spacing:-.035em !important;line-height:1.14 !important}.sales-workspace .heading p:not(.eyebrow){font-size:.85rem}.sales-actions-top,.rep-filter-label{width:100%}.rep-filter-label{justify-content:space-between;gap:.75rem}.rep-filter-label select{flex:1;min-width:0}.sales-tabs{gap:.35rem;padding-bottom:.3rem}.sales-tabs button{padding:.65rem .75rem;font-size:.74rem}.new-call-layout,.history-filters-grid,.form-grid-2{grid-template-columns:1fr}.sales-form,.sales-admin-form{gap:.8rem}.call-record-list{display:grid;grid-template-columns:1fr}.call-record-card{min-width:0}.call-record-meta{grid-template-columns:1fr}.call-detail-grid{grid-template-columns:1fr}.call-detail-header{flex-direction:column}.account-summary-list{grid-template-columns:1fr}.summary-metrics{grid-template-columns:1fr}.modal-backdrop{padding:0.75rem}.modal{max-height:calc(100vh - 1.5rem);width:min(100%,420px)}.modal .form-grid-2{grid-template-columns:1fr}.modal label,.modal input,.modal textarea,.modal select{min-width:0;width:100%;max-width:100%;box-sizing:border-box}.table-scroll{overflow-x:auto;max-height:60vh}.table{padding:.9rem}.table-header-row{align-items:flex-start;flex-direction:column}.btn-group{flex-wrap:wrap}.btn-group .button{flex:1 1 100%}.user-row{align-items:start;flex-direction:column}.user-row-actions{width:100%}.user-row-actions .button{flex:1}.invoice-mode{height:auto;overflow:visible}.invoice-workspace{padding-left:0;padding-right:0}.table-scroll table{min-width:720px}}` ]
 })
 class AppComponent implements OnInit {
   private readonly http = inject(HttpClient); private readonly elementRef = inject(ElementRef);
@@ -831,6 +925,7 @@ class AppComponent implements OnInit {
   salesTab: 'scheduled' | 'new-call' | 'history' | 'admin' = 'scheduled';
   salesReps: SalesRep[] = [];
   salesCustomers: SalesCustomer[] = [];
+  unassignedSalesCustomers: SalesCustomer[] = [];
   filteredSalesCustomers: SalesCustomer[] = [];
   adminAccountFilter = '';
   adminRepFilter = '';
@@ -839,10 +934,13 @@ class AppComponent implements OnInit {
   loadingScheduledCalls = false;
   callHistory: SalesCall[] = [];
   filteredCallHistory: SalesCall[] = [];
+  callHistoryAccountOptions: string[] = [];
+  selectedSummaryAccount = '';
+  selectedAccountSummaryCalls: SalesCall[] = [];
   accountSummaries: AccountSummary[] = [];
   filteredAccountSummaries: AccountSummary[] = [];
   historyViewMode: 'records' | 'summary' = 'records';
-  historyDateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+  historyDateFrom = toDateInputValue(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
   historyDateTo = toDateInputValue(new Date());
   historyAccountFilter = '';
   loadingHistory = false;
@@ -865,12 +963,44 @@ class AppComponent implements OnInit {
   completingCall: SalesCall | null = null;
   completingComments = '';
   completingFollowUpDate = '';
+  selectedCallDetails: SalesCall | null = null;
   editingCall: SalesCall | null = null;
   newSalesRep: SalesRep = { repName: '', repEmail: '' };
   newCustomerName = '';
   selectedAssignRepEmail = '';
+  accountAssignmentMessage = '';
 
   get isSalesAdmin(): boolean { return this.roles.includes('SalesAdmin'); }
+  get unassignedCustomerOptions(): CustomerSummary[] {
+    const uniqueCustomers = new Map<string, CustomerSummary>();
+    const assignedNames = new Set(
+      this.salesCustomers
+        .filter(salesCustomer => (salesCustomer.assignedSalesReps || []).length > 0)
+        .map(salesCustomer => this.getAccountName(salesCustomer).trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const addCustomer = (customer: { customerNumber?: number; customerName?: string; accountName?: string } | null | undefined) => {
+      if (!customer) return;
+      const customerName = (customer.customerName || customer.accountName || '').trim();
+      if (!customerName) return;
+      const key = customerName.toLowerCase();
+      if (assignedNames.has(key)) return;
+      if (!uniqueCustomers.has(key)) {
+        uniqueCustomers.set(key, {
+          customerNumber: customer.customerNumber || 0,
+          customerName
+        });
+      }
+    };
+
+    for (const customer of this.unassignedSalesCustomers) addCustomer(customer);
+    if (!uniqueCustomers.size) {
+      for (const customer of this.allCustomers) addCustomer(customer);
+    }
+
+    return Array.from(uniqueCustomers.values()).sort((a, b) => a.customerName.localeCompare(b.customerName));
+  }
   
   // Viewer state
   isViewer = false;
@@ -1304,6 +1434,32 @@ class AppComponent implements OnInit {
         this.filteredSalesCustomers = [];
       }
     });
+
+    this.http.get<any[]>('/api/sales/customers/unassigned').subscribe({
+      next: custs => {
+        this.unassignedSalesCustomers = (custs || [])
+          .map(c => {
+            if (typeof c === 'string') {
+              return { customerNumber: 0, customerName: c, accountName: c, assignedSalesReps: [] };
+            }
+            const customerName = c.customerName || c.accountName || c.customer_name || c.name || '';
+            return {
+              ...c,
+              customerName,
+              accountName: customerName,
+              assignedSalesReps: Array.isArray(c.assignedSalesReps) ? c.assignedSalesReps : (Array.isArray(c.assigned_sales_reps) ? c.assigned_sales_reps : [])
+            };
+          })
+          .filter(customer => {
+            const name = this.getAccountName(customer).trim().toLowerCase();
+            return !!name && !this.salesCustomers.some(salesCustomer =>
+              this.getAccountName(salesCustomer).trim().toLowerCase() === name && (salesCustomer.assignedSalesReps || []).length > 0);
+          });
+      },
+      error: () => {
+        this.unassignedSalesCustomers = [];
+      }
+    });
   }
 
   setSalesTab(tab: 'scheduled' | 'new-call' | 'history' | 'admin') {
@@ -1448,6 +1604,21 @@ class AppComponent implements OnInit {
     });
   }
 
+  openCallDetails(call: SalesCall) {
+    this.selectedCallDetails = call;
+  }
+
+  closeCallDetails() {
+    this.selectedCallDetails = null;
+  }
+
+  onCallCardKeydown(event: KeyboardEvent, call: SalesCall) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.openCallDetails(call);
+    }
+  }
+
   openEditCall(call: SalesCall) {
     this.editingCall = {
       ...call,
@@ -1494,25 +1665,36 @@ class AppComponent implements OnInit {
       this.http.get<SalesCall[]>('/api/sales/calls', { params }).subscribe({
         next: calls => {
           this.callHistory = calls || [];
+          this.callHistoryAccountOptions = [...new Set(this.callHistory.map(c => (c.accountName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
           this.applyHistoryFilter();
           this.loadingHistory = false;
         },
         error: () => {
           this.callHistory = [];
           this.filteredCallHistory = [];
+          this.callHistoryAccountOptions = [];
           this.loadingHistory = false;
         }
       });
     } else {
       this.http.get<AccountSummary[]>('/api/sales/calls/summary-by-account', { params }).subscribe({
         next: summaries => {
-          this.accountSummaries = summaries || [];
+          this.accountSummaries = (summaries || []).map(summary => ({
+            ...summary,
+            totalCalls: summary.totalCalls ?? summary.calls?.length ?? 0,
+            scheduledCalls: summary.scheduledCalls ?? summary.calls?.filter(call => call.status === 0).length ?? 0,
+            completedCalls: summary.completedCalls ?? summary.calls?.filter(call => call.status === 1).length ?? 0,
+            lastCallDate: summary.lastCallDate ?? summary.calls?.[0]?.callDate ?? summary.calls?.[0]?.createdDate,
+            calls: summary.calls || []
+          }));
+          this.callHistoryAccountOptions = [...new Set(this.accountSummaries.map(s => (s.accountName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
           this.applyHistoryFilter();
           this.loadingHistory = false;
         },
         error: () => {
           this.accountSummaries = [];
           this.filteredAccountSummaries = [];
+          this.callHistoryAccountOptions = [];
           this.loadingHistory = false;
         }
       });
@@ -1521,6 +1703,23 @@ class AppComponent implements OnInit {
 
   onHistoryAccountSearchChange() {
     this.applyHistoryFilter();
+  }
+
+  selectAccountSummary(summary: AccountSummary) {
+    this.selectedSummaryAccount = summary.accountName;
+    this.selectedAccountSummaryCalls = summary.calls || [];
+  }
+
+  clearSelectedSummaryAccount() {
+    this.selectedSummaryAccount = '';
+    this.selectedAccountSummaryCalls = [];
+  }
+
+  onSummaryCardKeydown(event: KeyboardEvent, summary: AccountSummary) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.selectAccountSummary(summary);
+    }
   }
 
   applyHistoryFilter() {
@@ -1641,29 +1840,30 @@ class AppComponent implements OnInit {
 
   addSalesCustomer() {
     const name = this.newCustomerName.trim();
-    if (!name) return;
-    this.http.post('/api/sales/customers', { customerName: name }).subscribe({
+    const selectedCustomer = this.unassignedCustomerOptions.find(customer =>
+      customer.customerName.trim().toLowerCase() === name.toLowerCase());
+
+    if (!selectedCustomer) {
+      this.accountAssignmentMessage = 'A customer must be selected before assigning an account.';
+      return;
+    }
+
+    if (!this.selectedAssignRepEmail) {
+      this.accountAssignmentMessage = 'Select a sales representative before assigning an account.';
+      return;
+    }
+
+    this.accountAssignmentMessage = '';
+    this.http.post('/api/sales/assignments', { customerName: selectedCustomer.customerName, repEmail: this.selectedAssignRepEmail }).subscribe({
       next: () => {
-        if (this.selectedAssignRepEmail) {
-          this.http.post('/api/sales/assignments', { customerName: name, repEmail: this.selectedAssignRepEmail }).subscribe({
-            next: () => {
-              this.newCustomerName = '';
-              this.selectedAssignRepEmail = '';
-              this.loadSalesData();
-            },
-            error: () => {
-              this.newCustomerName = '';
-              this.selectedAssignRepEmail = '';
-              this.loadSalesData();
-            }
-          });
-        } else {
-          this.newCustomerName = '';
-          this.selectedAssignRepEmail = '';
-          this.loadSalesData();
-        }
+        this.newCustomerName = '';
+        this.selectedAssignRepEmail = '';
+        this.accountAssignmentMessage = '';
+        this.loadSalesData();
       },
-      error: () => {}
+      error: error => {
+        this.accountAssignmentMessage = error.error?.message || error.error || 'Unable to assign the selected customer.';
+      }
     });
   }
 

@@ -104,6 +104,18 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
                     .Distinct()
                     .ToList();
             }
+            else if (repsObj is string repText)
+            {
+                var cleaned = repText.Trim();
+                if (!string.IsNullOrWhiteSpace(cleaned))
+                {
+                    customer.AssignedSalesReps = [cleaned.ToLowerInvariant()];
+                }
+            }
+            else if (repsObj is null)
+            {
+                customer.AssignedSalesReps = [];
+            }
         }
         else if (data.TryGetValue("SalesRep", out var singleRepObj) ||
                  data.TryGetValue("sales_rep", out singleRepObj) ||
@@ -429,53 +441,55 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             return false;
 
         var allSnapshot = await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken);
-        var doc = allSnapshot.Documents.FirstOrDefault(d =>
+        var existingDoc = allSnapshot.Documents.FirstOrDefault(d =>
         {
             var c = MapSalesCustomer(d);
             return string.Equals(c.CustomerName, name, StringComparison.OrdinalIgnoreCase);
         });
 
-        if (doc is null)
+        if (existingDoc is not null)
         {
-            // Seed from customers collection or create new
-            var custQuery = await firestore.Collection("customers")
-                .WhereEqualTo(nameof(Customer.CustomerName), name)
-                .Limit(1)
-                .GetSnapshotAsync(cancellationToken);
+            var customer = MapSalesCustomer(existingDoc);
+            if (customer.AssignedSalesReps.Count > 0)
+                return false;
 
-            int custNo = 0;
-            if (custQuery.Documents.Count > 0)
+            if (!customer.AssignedSalesReps.Any(r => string.Equals(r, email, StringComparison.OrdinalIgnoreCase)))
             {
-                var cust = custQuery.Documents[0].ConvertTo<Customer>();
-                custNo = cust.CustomerNumber;
+                customer.AssignedSalesReps.Add(email);
+                await existingDoc.Reference.UpdateAsync(nameof(SalesCustomer.AssignedSalesReps), customer.AssignedSalesReps, cancellationToken: cancellationToken);
             }
 
-            if (custNo == 0)
-            {
-                custNo = allSnapshot.Documents.Count > 0
-                    ? allSnapshot.Documents.Select(d => MapSalesCustomer(d).CustomerNumber).DefaultIfEmpty(0).Max() + 1
-                    : 1;
-            }
-
-            var newDocRef = firestore.Collection("sales_customers").Document(custNo.ToString());
-            var newCustomer = new SalesCustomer
-            {
-                CustomerNumber = custNo,
-                CustomerName = name,
-                Guid = Guid.NewGuid().ToString(),
-                AssignedSalesReps = [email]
-            };
-            await newDocRef.SetAsync(newCustomer, cancellationToken: cancellationToken);
             return true;
         }
 
-        var customer = MapSalesCustomer(doc);
-        if (!customer.AssignedSalesReps.Any(r => string.Equals(r, email, StringComparison.OrdinalIgnoreCase)))
+        var custQuery = await firestore.Collection("customers")
+            .WhereEqualTo(nameof(Customer.CustomerName), name)
+            .Limit(1)
+            .GetSnapshotAsync(cancellationToken);
+
+        int custNo = 0;
+        if (custQuery.Documents.Count > 0)
         {
-            customer.AssignedSalesReps.Add(email);
-            await doc.Reference.UpdateAsync(nameof(SalesCustomer.AssignedSalesReps), customer.AssignedSalesReps, cancellationToken: cancellationToken);
+            var cust = custQuery.Documents[0].ConvertTo<Customer>();
+            custNo = cust.CustomerNumber;
         }
 
+        if (custNo == 0)
+        {
+            custNo = allSnapshot.Documents.Count > 0
+                ? allSnapshot.Documents.Select(d => MapSalesCustomer(d).CustomerNumber).DefaultIfEmpty(0).Max() + 1
+                : 1;
+        }
+
+        var newDocRef = firestore.Collection("sales_customers").Document(custNo.ToString());
+        var newCustomer = new SalesCustomer
+        {
+            CustomerNumber = custNo,
+            CustomerName = name,
+            Guid = Guid.NewGuid().ToString(),
+            AssignedSalesReps = [email]
+        };
+        await newDocRef.SetAsync(newCustomer, cancellationToken: cancellationToken);
         return true;
     }
 
@@ -579,6 +593,33 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
                 IsProspect = g.Key.IsProspect,
                 CallCount = g.Count(),
                 LatestCall = g.Max(c => c.CallDate?.ToDateTime())
+            })
+            .OrderBy(a => a.AccountName)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<AccountSummaryResponse>> GetAccountSummaryAsync(string salesRepEmail, CancellationToken cancellationToken = default)
+    {
+        string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
+
+        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+
+        var calls = snapshot.Documents
+            .Select(MapSalesCall)
+            .Where(c => string.IsNullOrWhiteSpace(email) || string.Equals(c.SalesRepEmail, email, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => c.CallDate ?? c.CreatedDate)
+            .ToList();
+
+        return calls
+            .GroupBy(c => c.AccountName)
+            .Select(g => new AccountSummaryResponse
+            {
+                AccountName = g.Key,
+                Calls = g.OrderByDescending(c => c.CallDate ?? c.CreatedDate).ToList(),
+                TotalCalls = g.Count(),
+                CompletedCalls = g.Count(c => c.Status == 1),
+                ScheduledCalls = g.Count(c => c.Status == 0),
+                LastCallDate = g.Max(c => c.CallDate?.ToDateTime() ?? c.CreatedDate?.ToDateTime())
             })
             .OrderBy(a => a.AccountName)
             .ToList();

@@ -23,6 +23,7 @@ public interface ISalesRepository
     Task<IReadOnlyList<SalesCall>> GetCallRecordsForAccountAsync(string accountName, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SalesCall>> GetUpComingCallRecordsAsync(string salesRepEmail, DateTime currentDateTime, DateTime fromDate, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AccountCallsSummary>> GetCallsByAccountAsync(string salesRepEmail, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AccountSummaryResponse>> GetAccountSummaryAsync(string salesRepEmail, CancellationToken cancellationToken = default);
     Task<bool> InsertCallRecordAsync(SalesCall call, CancellationToken cancellationToken = default);
     Task<bool> UpdateCallRecordAsync(SalesCall call, CancellationToken cancellationToken = default);
     Task<bool> DeleteCallRecordAsync(int callId, CancellationToken cancellationToken = default);
