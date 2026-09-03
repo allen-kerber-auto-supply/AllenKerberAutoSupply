@@ -1,6 +1,8 @@
+using System.Text;
 using AllenKerberAutoSupply.Data;
 using AllenKerberAutoSupply.Options;
 using AllenKerberAutoSupply.Models;
+using AllenKerberAutoSupply.Services;
 using AllenKerberAutoSupply;
 using Google.Cloud.Firestore;
 using Google.Cloud.Storage.V1;
@@ -8,6 +10,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Resend;
+
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<GoogleCloudOptions>(builder.Configuration.GetSection(GoogleCloudOptions.SectionName));
@@ -27,8 +31,11 @@ builder.Services.AddSingleton(sp =>
     return new FirestoreDbBuilder { ProjectId = options.ProjectId, DatabaseId = options.FirestoreDatabase }.Build();
 });
 builder.Services.AddSingleton(StorageClient.Create());
+builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSingleton<IInvoiceRepository, FirestoreInvoiceRepository>();
+builder.Services.AddSingleton<IInvoiceStoreCache, InvoiceStoreCache>();
 builder.Services.AddSingleton<IInvoiceImageRepository, FirestoreInvoiceImageRepository>();
+builder.Services.AddSingleton<IUploadProgressEventBus, InvoiceUploadProgressEventBus>();
 builder.Services.AddSingleton<ICustomerRepository, FirestoreCustomerRepository>();
 builder.Services.AddSingleton<ISalesRepository, FirestoreSalesRepository>();
 builder.Services.AddSingleton<IUserRoleStore, FirestoreUserRoleStore>();
@@ -101,6 +108,8 @@ app.UseSpa(spa =>
 using (var scope = app.Services.CreateScope())
 {
     var roleStore = scope.ServiceProvider.GetRequiredService<IUserRoleStore>();
+    var invoiceStoreCache = scope.ServiceProvider.GetRequiredService<IInvoiceStoreCache>();
+    await invoiceStoreCache.InitializeAsync();
 }
 app.Run();
 

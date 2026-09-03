@@ -132,9 +132,9 @@ public sealed class InvoiceImagesController(IInvoiceImageRepository repository) 
             return BadRequest("An image, store number, and invoice number are required.");
 
         var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".pdf", ".tif", ".tiff" };
         if (!allowedExtensions.Contains(extension))
-            return BadRequest("Only JPG, PNG, and PDF files are supported.");
+            return BadRequest("Only JPG, PNG, TIFF, and PDF files are supported.");
 
         await using var stream = image.OpenReadStream();
         try

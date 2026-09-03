@@ -9,6 +9,7 @@
     <SpaProxyLaunchCommand>npm.cmd start</SpaProxyLaunchCommand>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="ExcelDataReader.DataSet" Version="3.7.0" />
     <PackageReference Include="Google.Cloud.Firestore" Version="3.10.0" />
     <PackageReference Include="Google.Cloud.SecretManager.V1" Version="2.7.0" />
     <PackageReference Include="Google.Cloud.Storage.V1" Version="4.10.0" />
@@ -16,6 +17,8 @@
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.0" />
     <PackageReference Include="Resend" Version="0.15.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
   </ItemGroup>
   <PropertyGroup>
     <!-- 1. Define the relative path to your frontend folder (adjust 'ClientApp\' if your folder is named 'Client' or 'Frontend') -->

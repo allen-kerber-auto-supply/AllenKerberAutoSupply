@@ -2,7 +2,7 @@ import 'zone.js';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { Component, ElementRef, HostListener, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, provideHttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType, provideHttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 
 interface Invoice { invoiceNumber: string; storeNumber?: number; customerNumber: string | number; customerName: string; invoiceAmount: number; invoiceDate?: string; hasImages?: boolean; }
@@ -11,6 +11,9 @@ interface ViewerPage { pageIndex: number; url: string; blobUrl?: string; loaded:
 interface CustomerSummary { customerNumber: number; customerName: string; }
 interface EmailGroup { customerNumber: number; customerName: string; invoices: Invoice[]; availableEmails: string[]; selectedEmails: string[]; adHocEmail: string; loadingEmails: boolean; }
 interface InvoiceEmailResult { customerNumber: number; email: string; success: boolean; error?: string; }
+interface InvoiceUploadReconciliation { missingInvoiceImages: string[]; missingInvoices: string[]; }
+interface MisreadBarcodeItem { id: string; fileName: string; objectName: string; bucketName: string; contentType: string; createdUtc?: string; }
+interface UploadProgressState { operation: string; busName: string; status: string; percent: number; message: string; processedCount: number; totalCount: number; updatedAtUtc?: string; }
 interface SalesRep { id?: number | string; repName?: string; repEmail?: string; name?: string; email?: string; status?: string; }
 interface SalesCustomer { customerNumber?: number; customerName?: string; accountName?: string; guid?: string; assignedSalesReps?: string[]; repEmail?: string; repName?: string; }
 interface SalesCall {
@@ -38,7 +41,7 @@ interface AccountSummary {
   completedCalls: number;
   calls?: SalesCall[];
 }
-type Destination = 'invoice' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
+type Destination = 'invoice' | 'invoice-upload' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
 type Theme = 'light' | 'dark';
 
 function toDateInputValue(date: Date): string { return date.toISOString().slice(0, 10); }
@@ -667,7 +670,10 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
       <div class="invoice-layout">
         <div class="invoice-search-col">
           <div class="card lookup">
-            <h2>Search Invoices</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+              <h2>Search Invoices</h2>
+              <button class="button secondary" type="button" (click)="go('invoice-upload')">Invoice uploads</button>
+            </div>
             <div class="search-group">
               <label>Invoice number
                 <div class="input-with-clear">
@@ -728,6 +734,95 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
       </div>
     </section>
 
+    <section *ngIf="authenticated && destination==='invoice-upload'" class="workspace invoice-workspace">
+      <div class="heading invoice-upload-heading">
+        <div>
+          <p class="eyebrow">Invoices</p>
+          <h1>Invoice uploads</h1>
+          <p>Import Excel invoice data or upload a folder of scanned images for the selected store.</p>
+        </div>
+        <button class="button secondary" type="button" (click)="go('invoice')">Back to invoice lookup</button>
+      </div>
+
+      <div class="card upload-panel">
+        <label>Store number
+          <ng-container *ngIf="invoiceStoreOptions.length; else noInvoiceStores">
+            <select class="store-select" [(ngModel)]="selectedInvoiceUploadStore" (change)="loadInvoiceReconciliation()">
+              <option [ngValue]="0">Select store...</option>
+              <option *ngFor="let storeNo of invoiceStoreOptions" [ngValue]="storeNo">{{storeNo}}</option>
+            </select>
+          </ng-container>
+          <ng-template #noInvoiceStores>
+            <div class="muted-note no-store-message">No store numbers are available yet. Import at least one invoice record first.</div>
+          </ng-template>
+        </label>
+        <div class="upload-actions">
+          <label class="button secondary upload-file-label">
+            Upload Excel
+            <input type="file" accept=".xls,.xlsx,.csv" class="upload-hidden-input" (change)="uploadExcel($event)" />
+          </label>
+          <label class="button secondary upload-file-label">
+            Upload image folder
+            <input type="file" multiple webkitdirectory directory class="upload-hidden-input" (change)="uploadImageFolder($event)" />
+          </label>
+        </div>
+        <div *ngIf="uploadCsvStatus" class="upload-status-block">
+          <p class="notice upload-status">{{uploadCsvStatus}}</p>
+          <div *ngIf="uploadCsvStatus || uploadCsvProgress >= 0" class="upload-progress-wrap" aria-label="Excel upload progress">
+            <div class="upload-progress-bar"><span [style.width.%]="uploadCsvProgress"></span></div>
+            <small>{{uploadCsvProgress}}%</small>
+          </div>
+        </div>
+        <div *ngIf="uploadImagesStatus" class="upload-status-block">
+          <p class="notice upload-status">{{uploadImagesStatus}}</p>
+          <div *ngIf="uploadImagesStatus || uploadImagesProgress >= 0" class="upload-progress-wrap" aria-label="Image upload progress">
+            <div class="upload-progress-bar"><span [style.width.%]="uploadImagesProgress"></span></div>
+            <small>{{uploadImagesProgress}}%</small>
+          </div>
+        </div>
+        <div *ngIf="misreadBarcodes.length" class="upload-status-block">
+          <p class="eyebrow">Misread barcode images</p>
+          <div class="misread-list">
+            <div *ngFor="let item of misreadBarcodes" class="card misread-item">
+              <div class="misread-item-header">
+                <strong>{{item.fileName}}</strong>
+                <div class="misread-actions">
+                  <button class="button secondary" type="button" (click)="openMisreadBarcode(item)">View</button>
+                  <button class="button danger" type="button" (click)="deleteMisreadBarcode(item)">Delete</button>
+                </div>
+              </div>
+              <label>Invoice number
+                <input type="text" [(ngModel)]="misreadBarcodeDrafts[item.id].invoiceNumber" name="misreadInvoice-{{item.id}}" placeholder="Enter invoice number">
+              </label>
+              <label>Store number
+                <select [(ngModel)]="misreadBarcodeDrafts[item.id].storeNumber" name="misreadStore-{{item.id}}">
+                  <option [ngValue]="0">Select store...</option>
+                  <option *ngFor="let storeNo of invoiceStoreOptions" [ngValue]="storeNo">{{storeNo}}</option>
+                </select>
+              </label>
+              <button class="button primary" type="button" (click)="resolveMisreadBarcode(item)">Save image</button>
+            </div>
+          </div>
+        </div>
+        <div class="upload-reconciliation-grid">
+          <div class="card upload-list-card">
+            <h3>Invoices missing images</h3>
+            <ul *ngIf="invoiceUploadReconciliation.missingInvoiceImages.length; else emptyInvoiceMissing">
+              <li *ngFor="let invoiceKey of invoiceUploadReconciliation.missingInvoiceImages">{{invoiceKey}}</li>
+            </ul>
+            <ng-template #emptyInvoiceMissing><p class="muted-note empty-upload-message">No missing invoice-image matches for this store.</p></ng-template>
+          </div>
+          <div class="card upload-list-card">
+            <h3>Images missing invoices</h3>
+            <ul *ngIf="invoiceUploadReconciliation.missingInvoices.length; else emptyImageMissing">
+              <li *ngFor="let invoiceKey of invoiceUploadReconciliation.missingInvoices">{{invoiceKey}}</li>
+            </ul>
+            <ng-template #emptyImageMissing><p class="muted-note empty-upload-message">No missing invoice records for this store.</p></ng-template>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section *ngIf="authenticated && destination==='admin'" class="workspace"><div class="heading"><div><p class="eyebrow">Administration</p><h1>User access</h1><p>Create user accounts, assign access, and reset temporary passwords.</p></div><button class="button secondary" (click)="go(previousWorkspace)">Back to workspace</button></div><div class="admin-grid"><form class="card user-form" (ngSubmit)="createUser()"><h2>Add a user</h2><label>Full name<input [(ngModel)]="newUser.displayName" name="displayName" required placeholder="Jane Smith"></label><label>Email address<input [(ngModel)]="newUser.email" name="email" required type="email" placeholder="jane@company.com"></label><label>Temporary password<div class="code-field"><strong class="code-display">{{newUser.temporaryPassword}}</strong><button type="button" class="button secondary" (click)="newUser.temporaryPassword = generateTempPassword()">Generate new code</button></div></label><fieldset><legend>Access roles</legend><label *ngFor="let role of roleOptions" class="check"><input type="checkbox" [checked]="hasRole(role)" (change)="toggleRole(role, $any($event.target).checked)"> {{role}}</label></fieldset><button class="button primary" type="submit">Create user</button><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form><div class="card users"><div><p class="eyebrow">Provisioned users</p><h2>Current access</h2></div><p *ngIf="loadingUsers">Loading users...</p><div *ngIf="usersError" class="alert users-error"><span>{{usersError}}</span><button class="button secondary" type="button" (click)="loadUsers()">Retry</button></div><div *ngFor="let user of users" class="user-row"><div><b>{{user.displayName}}</b><small>{{user.email}}</small><em>{{user.roles.join(' · ')}}</em></div><div class="user-row-actions"><button class="button secondary" type="button" (click)="startEditRoles(user)">Edit roles</button><button class="button secondary" type="button" (click)="startReset(user)">Reset password</button><button class="button danger" type="button" [disabled]="isSelf(user)" [title]="isSelf(user) ? 'You cannot delete your own account.' : ''" (click)="startDelete(user)">Delete</button></div></div></div></div></section>
     <div *ngIf="resettingUser" class="modal-backdrop"><form class="card modal" (ngSubmit)="resetPassword()"><p class="eyebrow">Password reset</p><h2>Reset {{resettingUser.displayName}}’s password</h2><p>The user will be required to change it after their next email/password sign-in.</p><label>New temporary password<div class="code-field"><strong class="code-display">{{resetPasswordValue}}</strong><button type="button" class="button secondary" (click)="resetPasswordValue = generateTempPassword()">Generate new code</button></div></label><div><button class="button secondary" type="button" (click)="resettingUser=null">Cancel</button><button class="button primary" type="submit">Reset password</button></div><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form></div>
     <div *ngIf="editingRolesUser" class="modal-backdrop"><form class="card modal" (ngSubmit)="saveRoles()"><p class="eyebrow">Access roles</p><h2>Edit {{editingRolesUser.displayName}}’s roles</h2><p>Choose the roles this account should have.</p><fieldset><legend>Access roles</legend><label *ngFor="let role of roleOptions" class="check"><input type="checkbox" [checked]="hasEditingRole(role)" (change)="toggleEditingRole(role, $any($event.target).checked)"> {{role}}</label></fieldset><div><button class="button secondary" type="button" (click)="editingRolesUser=null">Cancel</button><button class="button primary" type="submit">Save roles</button></div><p *ngIf="adminMessage" [class.alert]="adminError" class="notice">{{adminMessage}}</p></form></div>
@@ -765,8 +860,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
     </div>
   </div>`,
   styles: [`
-  main,.viewer-layout,.modal-backdrop{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;min-height:100vh;color:var(--text)}main{padding:0 5vw 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme,.modal-backdrop.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace{max-width:1180px;margin:auto}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}.auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:8vw;padding:4rem 4vw}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;margin:7rem auto;padding:0 1.25rem}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem 4vw}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}  th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.sortable{cursor:pointer;user-select:none}.sortable:focus-visible{outline:2px solid color-mix(in srgb,var(--blue) 30%,transparent);outline-offset:2px}.sort-indicator{display:inline-block;min-width:0.8rem}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}.invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:4vw;padding-right:4vw}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:4vw;padding-right:4vw}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}  .invoice-search-col{align-self:start;min-width:0;width:100%}.invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem;width:100%;max-width:100%;box-sizing:border-box}.search-group{display:grid;gap:.8rem;min-width:0}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column;min-width:0;width:100%}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0;width:100%;max-width:100%;box-sizing:border-box}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem;overflow-x:auto}.table-scroll table{margin-top:0;min-width:0;width:100%}.select-cell{width:2.2rem;text-align:center}.select-cell input{width:auto}.table-header-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.email-modal{width:min(560px,100%);max-height:80vh;overflow:auto}.email-group{display:grid;gap:.6rem;padding:1rem 0;border-top:1px solid var(--line)}.email-group:first-of-type{border-top:0;padding-top:0}.email-group h3{margin:0;font-size:1rem}.email-group h3 small{color:var(--muted);font-weight:400}.email-checklist{display:flex;flex-wrap:wrap;gap:.2rem .8rem}.muted-note{color:var(--muted);font-size:.82rem;margin:0}.email-results p{margin:.3rem 0;font-size:.85rem}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}  .notice{margin:0;font-size:.8rem}  .modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:1100;min-height:auto;overflow-y:auto}.modal{width:min(450px,100%);max-height:calc(100vh - 2rem);overflow:auto}.modal>div{display:flex;justify-content:end;gap:.6rem}.modal label,.modal input,.modal textarea,.modal select,.modal .form-grid-2{width:100%;max-width:100%}.modal .form-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.modal input,.modal textarea,.modal select{min-width:0;box-sizing:border-box}.modal textarea{width:100%}
-
+  main,.viewer-layout,.modal-backdrop{--bg:#f5f7fb;--surface:#fff;--soft:#f6f8fc;--text:#172033;--muted:#64748b;--line:#dfe6f1;--blue:#185adb;--shadow:0 20px 50px #162b5415;--page-max:1280px;--page-pad:clamp(.7rem,1.5vw,1.5rem);min-height:100vh;color:var(--text)}main{padding:0 var(--page-pad) 4rem;background:radial-gradient(circle at 8% 0,#e4eeff,transparent 27rem),var(--bg)}.dark-theme,.modal-backdrop.dark-theme{--bg:#0b1120;--surface:#131c30;--soft:#19243a;--text:#eff4ff;--muted:#aab7cd;--line:#2b3954;--blue:#7da9ff;--shadow:0 20px 50px #0007;background:radial-gradient(circle at 8% 0,#172b52,transparent 27rem),var(--bg)}header,.auth-layout,.workspace,.sales-workspace,.narrow{width:min(100%,var(--page-max));margin-inline:auto;box-sizing:border-box}header{height:88px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 var(--page-pad)}.brand{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--text)}.icon,.app-card i{display:grid;place-items:center;width:38px;height:38px;background:linear-gradient(135deg,var(--blue),#83aaff);color:white;border-radius:11px;font-size:.72rem;font-style:normal;font-weight:800}.brand-logo{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}.brand b{font-family:Georgia,serif}.brand small,.user-row small,.user-row em,.app-card small,.app-card b,.app-card em{display:block}.brand small{color:var(--muted);font:700 .62rem system-ui;letter-spacing:.13em;text-transform:uppercase}.actions,.menu>button{display:flex;align-items:center;gap:.6rem}.theme,.menu button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:.5rem;border-radius:8px}.menu{position:relative}.menu>button i{display:grid;place-items:center;width:30px;height:30px;background:var(--blue);color:#fff;border-radius:50%;font-size:.68rem;font-style:normal}.menu-items{position:absolute;right:0;top:105%;width:190px;padding:.3rem;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:5}.menu-items button{display:block;width:100%;text-align:left}  .auth-layout{min-height:calc(100vh - 88px);display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:clamp(1.5rem,4vw,5.5rem);padding:4rem var(--page-pad)}.eyebrow{margin:0 0 .6rem;color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:0;font:clamp(2.1rem,4.5vw,4.5rem)/1.03 Georgia,serif;letter-spacing:-.055em}h1 em{color:var(--blue);font-weight:400}.intro>p:not(.eyebrow),.workspace>p,.heading p:not(.eyebrow),.modal>p:not(.eyebrow){color:var(--muted);line-height:1.6}.intro>p:not(.eyebrow){font-size:1.05rem;max-width:450px}.card,.state{background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.auth-card,.change-card,.user-form,.modal{display:grid;gap:1rem;padding:2rem}.auth-card h2,.lookup h2,.table h2,.user-form h2,.users h2,.state h2,.modal h2{margin:0;font-size:1.25rem}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:var(--soft);border-radius:8px}.tabs button{border:0;border-radius:6px;padding:.6rem;background:transparent;color:var(--muted);cursor:pointer}.tabs .active{background:var(--surface);color:var(--text);box-shadow:0 2px 5px #0002}.form,label{display:grid;gap:.42rem}label{font-size:.75rem;font-weight:700}input{padding:.78rem .85rem;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}input:focus{outline:3px solid color-mix(in srgb,var(--blue) 25%,transparent);border-color:var(--blue)}.button{display:inline-flex;justify-content:center;align-items:center;min-height:41px;padding:.65rem .95rem;border:1px solid transparent;border-radius:8px;font:700 .8rem system-ui;cursor:pointer;text-decoration:none}.primary{background:var(--blue);color:#fff}.secondary{background:var(--surface);border-color:var(--line);color:var(--text)}.danger{background:transparent;border-color:#dc4d4d;color:#dc4d4d}.danger:hover{background:#dc4d4d18}.button:disabled{opacity:.45;cursor:not-allowed;transform:none}.alert{padding:.7rem;border-left:3px solid #dc4d4d;background:#dc4d4d18}.users-error{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:1rem}.narrow{max-width:480px;width:min(100%,480px);margin:7rem auto;padding:0 var(--page-pad)}.change-card>p:not(.eyebrow){color:var(--muted);line-height:1.5;margin:0}.workspace{padding:3.5rem var(--page-pad)}.heading{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:2rem}.heading h1{font-size:clamp(2rem,4vw,3.3rem)}.grid,.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}.app-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:1rem;padding:1.3rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);text-align:left;cursor:pointer}.app-card:hover{border-color:var(--blue);transform:translateY(-2px)}.app-card small{color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.1em}.app-card b{font-size:1.08rem;margin:.18rem 0}.app-card em{color:var(--muted);font-size:.8rem;font-style:normal}.invoice i{background:#ff7c50}.lookup{padding:1.4rem}.search{display:grid;grid-template-columns:1fr 1fr auto;gap:.8rem;align-items:end;margin-top:1.15rem}.table{margin-top:1.2rem;overflow:auto;padding:1.3rem}table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.86rem}  th,td{padding:.85rem;text-align:left;border-top:1px solid var(--line)}th{color:var(--muted);font-size:.68rem;text-transform:uppercase}.sortable{cursor:pointer;user-select:none}.sortable:focus-visible{outline:2px solid color-mix(in srgb,var(--blue) 30%,transparent);outline-offset:2px}.sort-indicator{display:inline-block;min-width:0.8rem}.invoice-row{cursor:pointer;transition:background .15s ease}.invoice-row:hover{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.action-cell{text-align:right}.view-btn{min-height:32px;padding:.35rem .75rem;font-size:.75rem}.state{text-align:center;padding:3rem;margin-top:.5rem}  .invoice-mode{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding:0}.invoice-mode header{flex:0 0 auto;max-width:none;margin:0;padding-left:var(--page-pad);padding-right:var(--page-pad)}.invoice-workspace{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:2rem;padding-bottom:1.5rem}.invoice-workspace.workspace{padding-left:var(--page-pad);padding-right:var(--page-pad)}.invoice-workspace .heading{flex:0 0 auto;margin-bottom:1rem;width:100%}.invoice-workspace .heading > div{flex:1 1 auto;min-width:0}.invoice-layout{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 2fr;gap:1.25rem;align-items:stretch}.invoice-upload-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem}.upload-panel{width:100%;max-width:none;box-sizing:border-box;padding:1.25rem}.upload-actions{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-top:.8rem}.upload-file-label{position:relative;overflow:hidden;cursor:pointer}.upload-hidden-input{position:absolute;inset:0;opacity:0;cursor:pointer}  .upload-status{margin-top:.8rem}.upload-status-block{margin-top:.8rem}  .upload-progress-wrap{display:grid;gap:.35rem;margin-top:.45rem}.upload-progress-bar{position:relative;height:12px;border-radius:999px;background:var(--soft);overflow:hidden;border:1px solid var(--line)}.upload-progress-bar span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--blue),#7da9ff);transition:width .2s ease}.upload-progress-wrap small{color:var(--muted);font-weight:700}.misread-list{display:grid;gap:.75rem;margin-top:.75rem}.misread-item{display:grid;gap:.7rem;padding:1rem}.misread-item-header{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}.misread-item-header strong{word-break:break-word}.misread-actions{display:flex;flex-wrap:wrap;gap:.5rem}.upload-reconciliation-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}.upload-list-card{padding:1rem}.upload-list-card h3{margin:0 0 .5rem}.upload-list-card ul{margin:0;padding-left:1.2rem}.empty-upload-message{margin:0}.no-store-message{margin-top:.35rem}.invoice-search-col{align-self:start;min-width:0;width:100%}. invoice-search-col .lookup{display:grid;gap:1rem;padding:1.4rem;width:100%;max-width:100%;box-sizing:border-box}.search-group{display:grid;gap:.8rem;min-width:0}.input-with-clear{position:relative;display:flex;align-items:center}.input-with-clear input{width:100%;padding-right:2.2rem}.clear-btn{position:absolute;right:.4rem;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:.3rem .4rem;border-radius:6px}.clear-btn:hover{color:var(--text);background:color-mix(in srgb,var(--blue) 10%,transparent)}.search-divider{text-align:center;color:var(--muted);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin:.1rem 0}.date-range{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.invoice-results-col{min-height:0;display:flex;flex-direction:column;min-width:0;width:100%}.invoice-results-col .heading{flex:0 0 auto;margin-bottom:1rem}.invoice-results-col .table{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin-top:0;width:100%;max-width:100%;box-sizing:border-box}.invoice-results-col .table h2{flex:0 0 auto}.invoice-results-col .state{margin-top:0}.table-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;margin-top:1rem;overflow-x:auto}.table-scroll table{margin-top:0;min-width:0;width:100%}.select-cell{width:2.2rem;text-align:center}.select-cell input{width:auto}.table-header-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.email-modal{width:min(560px,100%);max-height:80vh;overflow:auto}.email-group{display:grid;gap:.6rem;padding:1rem 0;border-top:1px solid var(--line)}.email-group:first-of-type{border-top:0;padding-top:0}.email-group h3{margin:0;font-size:1rem}.email-group h3 small{color:var(--muted);font-weight:400}.email-checklist{display:flex;flex-wrap:wrap;gap:.2rem .8rem}.muted-note{color:var(--muted);font-size:.82rem;margin:0}.email-results p{margin:.3rem 0;font-size:.85rem}.state .icon{margin:0 auto 1rem}.admin-grid{grid-template-columns:minmax(280px,.8fr) 1.2fr;align-items:start}.user-form fieldset{border:1px solid var(--line);border-radius:8px}.user-form legend{font-size:.75rem;font-weight:700}.check{display:inline-flex;margin:.25rem .6rem .25rem 0;align-items:center}.check input{width:auto}.code-field{display:flex;align-items:center;gap:.7rem}.code-display{padding:.78rem .85rem;border:1px dashed var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:700 1rem/1 ui-monospace,monospace;letter-spacing:.06em}.users{padding:1.5rem}.user-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}.user-row-actions{display:flex;gap:.6rem;flex-shrink:0}.user-row:first-of-type{margin-top:1rem}.user-row small,.user-row em{color:var(--muted);font-size:.76rem;margin-top:.2rem}.user-row em{font-style:normal}  .notice{margin:0;font-size:.8rem}  .modal-backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#08122288;z-index:1100;min-height:auto;overflow-y:auto}.modal{width:min(450px,100%);max-height:calc(100vh - 2rem);overflow:auto}.modal>div{display:flex;justify-content:end;gap:.6rem}.modal label,.modal input,.modal textarea,.modal select,.modal .form-grid-2{width:100%;max-width:100%}.modal .form-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.modal input,.modal textarea,.modal select{min-width:0;box-sizing:border-box}.modal textarea{width:100%}
   /* INVOICE VIEWER STYLES */
   .viewer-layout { min-height: 100vh; background: #1e293b; color: #0f172a; }
   .viewer-toolbar {
@@ -820,6 +914,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   .rep-filter-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
   .rep-filter-label select, select { padding: 0.65rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--text); font: inherit; }
   select:focus { outline: 3px solid color-mix(in srgb,var(--blue) 25%,transparent); border-color: var(--blue); }
+  .store-select { width: min(220px, 100%); min-height: 38px; font-size: 0.9rem; padding: 0.6rem 0.75rem; }
   .sales-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; overflow-x: auto; }
   .sales-tabs button { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); font: 700 0.88rem system-ui; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
   .sales-tabs button:hover { background: var(--soft); color: var(--text); }
@@ -941,11 +1036,11 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   }
 
   @media(max-width:980px){.admin-grid,.new-call-layout,.invoice-layout{grid-template-columns:1fr}}
-  @media(max-width:760px){main{padding:0 1.2rem 2.5rem}header{height:72px}.menu>button span,.theme{font-size:.72rem}.auth-layout,.grid,.admin-grid,.search,.invoice-layout,.date-range{grid-template-columns:1fr}.auth-layout{gap:2rem;padding:3rem 0}.workspace{padding:2.5rem 0}.sales-workspace{padding-top:1rem}.heading{align-items:start;flex-direction:column}.sales-workspace .heading{margin-bottom:1rem}.sales-workspace .heading > div:first-child h1,.sales-workspace .heading h1{font-size:1.55rem !important;letter-spacing:-.035em !important;line-height:1.14 !important}.sales-workspace .heading p:not(.eyebrow){font-size:.85rem}.sales-actions-top,.rep-filter-label{width:100%}.rep-filter-label{justify-content:space-between;gap:.75rem}.rep-filter-label select{flex:1;min-width:0}.sales-tabs{gap:.35rem;padding-bottom:.3rem}.sales-tabs button{padding:.65rem .75rem;font-size:.74rem}.new-call-layout,.history-filters-grid,.form-grid-2{grid-template-columns:1fr}.sales-form,.sales-admin-form{gap:.8rem}.call-record-list{display:grid;grid-template-columns:1fr}.call-record-card{min-width:0}.call-record-meta{grid-template-columns:1fr}.call-detail-grid{grid-template-columns:1fr}.call-detail-header{flex-direction:column}.account-summary-list{grid-template-columns:1fr}.summary-metrics{grid-template-columns:1fr}.modal-backdrop{padding:0.75rem}.modal{max-height:calc(100vh - 1.5rem);width:min(100%,420px)}.modal .form-grid-2{grid-template-columns:1fr}.modal label,.modal input,.modal textarea,.modal select{min-width:0;width:100%;max-width:100%;box-sizing:border-box}.table-scroll{overflow-x:auto;max-height:60vh}.table{padding:.9rem}.table-header-row{align-items:flex-start;flex-direction:column}.btn-group{flex-wrap:wrap}.btn-group .button{flex:1 1 100%}.user-row{align-items:start;flex-direction:column}.user-row-actions{width:100%}.user-row-actions .button{flex:1}.invoice-mode{height:auto;overflow:visible}.invoice-workspace{padding-left:0;padding-right:0}.invoice-search-col,.invoice-results-col{width:100%;min-width:0}.invoice-layout{display:grid}.table-scroll table{min-width:720px}}` ]
+  @media(max-width:760px){main{padding:0 var(--page-pad) 2.5rem}header{height:72px;padding:0 var(--page-pad)}.menu>button span,.theme{font-size:.72rem}.auth-layout,.grid,.admin-grid,.search,.invoice-layout,.date-range{grid-template-columns:1fr}.auth-layout{gap:2rem;padding:3rem var(--page-pad)}.workspace{padding:2.5rem var(--page-pad)}.sales-workspace{padding-top:1rem;padding-left:var(--page-pad);padding-right:var(--page-pad)}.heading{align-items:start;flex-direction:column}.sales-workspace .heading{margin-bottom:1rem}.sales-workspace .heading > div:first-child h1,.sales-workspace .heading h1{font-size:1.55rem !important;letter-spacing:-.035em !important;line-height:1.14 !important}.sales-workspace .heading p:not(.eyebrow){font-size:.85rem}.sales-actions-top,.rep-filter-label{width:100%}.rep-filter-label{justify-content:space-between;gap:.75rem}.rep-filter-label select{flex:1;min-width:0}.sales-tabs{gap:.35rem;padding-bottom:.3rem}.sales-tabs button{padding:.65rem .75rem;font-size:.74rem}.new-call-layout,.history-filters-grid,.form-grid-2{grid-template-columns:1fr}.sales-form,.sales-admin-form{gap:.8rem}.call-record-list{display:grid;grid-template-columns:1fr}.call-record-card{min-width:0}.call-record-meta{grid-template-columns:1fr}.call-detail-grid{grid-template-columns:1fr}.call-detail-header{flex-direction:column}.account-summary-list{grid-template-columns:1fr}.summary-metrics{grid-template-columns:1fr}.modal-backdrop{padding:0.75rem}.modal{max-height:calc(100vh - 1.5rem);width:min(100%,420px)}.modal .form-grid-2{grid-template-columns:1fr}.modal label,.modal input,.modal textarea,.modal select{min-width:0;width:100%;max-width:100%;box-sizing:border-box}.table-scroll{overflow-x:auto;max-height:60vh}.table{padding:.9rem}.table-header-row{align-items:flex-start;flex-direction:column}.btn-group{flex-wrap:wrap}.btn-group .button{flex:1 1 100%}.user-row{align-items:start;flex-direction:column}.user-row-actions{width:100%}.user-row-actions .button{flex:1}.invoice-mode{height:auto;overflow:visible}.invoice-workspace{padding-left:var(--page-pad);padding-right:var(--page-pad)}.invoice-search-col,.invoice-results-col{width:100%;min-width:0}.invoice-layout{display:grid}.table-scroll table{min-width:720px}}` ]
 })
 class AppComponent implements OnInit {
   private readonly http = inject(HttpClient); private readonly elementRef = inject(ElementRef);
-  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; menuOpen = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; loginMode: 'google' | 'password' = 'password'; email = ''; password = ''; currentPassword = ''; newPassword = ''; confirmPassword = ''; invoiceNumber = ''; customerName = ''; allCustomers: CustomerSummary[] = []; dateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)); dateTo = toDateInputValue(new Date()); today = toDateInputValue(new Date()); searchPerformed = false;   invoices: Invoice[] = []; error = ''; selectedInvoiceKeys = new Set<string>(); emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; invoiceSortKey: 'invoiceDate' | 'invoiceAmount' | 'customerName' | 'customerNumber' = 'invoiceDate'; invoiceSortDirection: 'asc' | 'desc' = 'desc'; showCustomerColumns = true; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
+  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; menuOpen = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; loginMode: 'google' | 'password' = 'password'; email = ''; password = ''; currentPassword = ''; newPassword = ''; confirmPassword = ''; invoiceNumber = ''; customerName = ''; allCustomers: CustomerSummary[] = []; dateFrom = toDateInputValue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)); dateTo = toDateInputValue(new Date()); today = toDateInputValue(new Date()); searchPerformed = false;   invoices: Invoice[] = []; error = ''; selectedInvoiceKeys = new Set<string>(); emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; invoiceSortKey: 'invoiceDate' | 'invoiceAmount' | 'customerName' | 'customerNumber' = 'invoiceDate'; invoiceSortDirection: 'asc' | 'desc' = 'desc'; showCustomerColumns = true;   selectedInvoiceUploadStore = 0; invoiceStoreOptions: number[] = []; uploadCsvStatus = ''; uploadCsvProgress = 0; uploadImagesStatus = ''; uploadImagesProgress = 0; invoiceUploadReconciliation: InvoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] }; misreadBarcodes: MisreadBarcodeItem[] = []; misreadBarcodeDrafts: Record<string, { invoiceNumber: string; storeNumber: number }> = {}; private excelProgressTimer: number | null = null; private imageProgressTimer: number | null = null; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
 
   // Sales state
   salesTab: 'scheduled' | 'new-call' | 'history' | 'admin' = 'scheduled';
@@ -1049,7 +1144,10 @@ class AppComponent implements OnInit {
       this.mustChangePassword = x.mustChangePassword;
       if (x.authenticated && !this.isViewer) {
         this.setDestination();
-        if (this.destination === 'invoice') this.loadCustomers();
+        if (this.destination === 'invoice') {
+          this.loadCustomers();
+          this.loadInvoiceStoreOptions();
+        }
         if (this.destination === 'sales') this.loadSalesData();
       }
     });
@@ -1183,7 +1281,7 @@ class AppComponent implements OnInit {
   initialTheme(): Theme { const stored = localStorage.getItem('theme'); return stored === 'dark' || stored === 'light' ? stored : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
   toggleTheme() { this.theme = this.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', this.theme); }
   setDestination() { const sales = this.roles.includes('SalesAdmin') || this.roles.includes('SalesUser'); const invoice = this.roles.some(role => ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser'].includes(role)); this.hasDualRoles = sales && invoice; this.canManageUsers = this.roles.some(role => ['InvoiceAdmin', 'SalesAdmin'].includes(role)); this.destination = this.mustChangePassword ? 'password-change' : this.hasDualRoles ? 'choose' : sales ? 'sales' : invoice ? 'invoice' : null; this.denied = this.destination === null; }
-  go(destination: Destination) { if (this.destination !== 'admin') this.previousWorkspace = this.destination; this.destination = destination; this.menuOpen = false; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') this.loadCustomers(); if (destination === 'sales') this.loadSalesData(); }
+  go(destination: Destination) { if (this.destination !== 'admin') this.previousWorkspace = this.destination; this.destination = destination; this.menuOpen = false; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') { this.loadCustomers(); this.loadInvoiceStoreOptions(); } if (destination === 'invoice-upload') { this.loadInvoiceStoreOptions(); this.loadMisreadBarcodes(); } if (destination === 'sales') this.loadSalesData(); }
   switchView() { this.go(this.destination === 'sales' ? 'invoice' : 'sales'); }
   passwordLogin() { this.http.post('/auth/password-login', { email: this.email, password: this.password }).subscribe({ next: () => location.reload(), error: e => { this.denied = e.status === 403; this.error = this.denied ? '' : (e.error?.message || e.error || 'Unable to sign in.'); } }); }
   changePassword() { if (this.newPassword !== this.confirmPassword) { this.error = 'The new passwords do not match.'; return; } this.http.post('/auth/change-password', { currentPassword: this.currentPassword, newPassword: this.newPassword }).subscribe({ next: () => location.reload(), error: e => this.error = e.error?.message || 'Unable to update your password.' }); }
@@ -1943,6 +2041,232 @@ class AppComponent implements OnInit {
         this.loadSalesData();
       },
       error: () => {}
+    });
+  }
+
+  loadInvoiceStoreOptions() {
+    this.http.get<number[]>('/api/invoices/stores').subscribe({
+      next: stores => {
+        this.invoiceStoreOptions = (stores || []).sort((a, b) => a - b);
+        if (this.selectedInvoiceUploadStore <= 0 || !this.invoiceStoreOptions.includes(this.selectedInvoiceUploadStore)) {
+          this.selectedInvoiceUploadStore = 0;
+        }
+        this.loadInvoiceReconciliation();
+      },
+      error: () => {
+        this.invoiceStoreOptions = [];
+        this.selectedInvoiceUploadStore = 0;
+        this.invoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
+      }
+    });
+  }
+
+  loadInvoiceReconciliation() {
+    if (this.selectedInvoiceUploadStore <= 0) {
+      this.invoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
+      return;
+    }
+
+    this.http.get<InvoiceUploadReconciliation>(`/api/invoices/upload-reconciliation?storeNumber=${this.selectedInvoiceUploadStore}`).subscribe({
+      next: reconciliation => {
+        this.invoiceUploadReconciliation = reconciliation || { missingInvoiceImages: [], missingInvoices: [] };
+      },
+      error: () => {
+        this.invoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
+      }
+    });
+  }
+
+  private startProgressTimer(type: 'excel' | 'images') {
+    const timerKey = type === 'excel' ? 'excelProgressTimer' : 'imageProgressTimer';
+    const targetKey = type === 'excel' ? 'uploadCsvProgress' : 'uploadImagesProgress';
+    const statusKey = type === 'excel' ? 'uploadCsvStatus' : 'uploadImagesStatus';
+    const operation = type === 'excel' ? 'excel' : 'images';
+
+    const poll = () => {
+      this.http.get<UploadProgressState>(`/api/invoices/progress?operation=${encodeURIComponent(operation)}`).subscribe({
+        next: state => {
+          if (!state) return;
+          const percent = Math.max(0, Math.min(100, Number(state.percent) || 0));
+          this[targetKey as 'uploadCsvProgress' | 'uploadImagesProgress'] = percent;
+          const message = state.message || (type === 'excel' ? 'Uploading Excel file...' : 'Uploading images...');
+          this[statusKey as 'uploadCsvStatus' | 'uploadImagesStatus'] = message;
+
+          if (state.status === 'completed' || percent >= 100) {
+            this.stopProgressTimer(type);
+          }
+        },
+        error: () => {
+          this[targetKey as 'uploadCsvProgress' | 'uploadImagesProgress'] = 0;
+          this[statusKey as 'uploadCsvStatus' | 'uploadImagesStatus'] = type === 'excel' ? 'Uploading Excel file...' : 'Uploading images...';
+        }
+      });
+    };
+
+    poll();
+    const timer = window.setInterval(poll, 500);
+    this[timerKey as 'excelProgressTimer' | 'imageProgressTimer'] = timer;
+  }
+
+  private stopProgressTimer(type: 'excel' | 'images') {
+    const timerKey = type === 'excel' ? 'excelProgressTimer' : 'imageProgressTimer';
+    const timer = this[timerKey as 'excelProgressTimer' | 'imageProgressTimer'];
+    if (timer !== null) {
+      window.clearInterval(timer);
+      this[timerKey as 'excelProgressTimer' | 'imageProgressTimer'] = null;
+    }
+  }
+
+  loadMisreadBarcodes() {
+    this.http.get<MisreadBarcodeItem[]>('/api/invoices/misread-barcodes').subscribe({
+      next: items => {
+        this.misreadBarcodes = items || [];
+        this.misreadBarcodeDrafts = {};
+        for (const item of this.misreadBarcodes) {
+          this.misreadBarcodeDrafts[item.id] = {
+            invoiceNumber: '',
+            storeNumber: this.selectedInvoiceUploadStore > 0 ? this.selectedInvoiceUploadStore : 0
+          };
+        }
+      },
+      error: () => {
+        this.misreadBarcodes = [];
+        this.misreadBarcodeDrafts = {};
+      }
+    });
+  }
+
+  openMisreadBarcode(item: MisreadBarcodeItem) {
+    window.open(`/api/invoices/misread-barcodes/${encodeURIComponent(item.id)}/view`, '_blank');
+  }
+
+  resolveMisreadBarcode(item: MisreadBarcodeItem) {
+    const draft = this.misreadBarcodeDrafts[item.id] || { invoiceNumber: '', storeNumber: 0 };
+    const invoiceNumber = draft.invoiceNumber.trim();
+    const storeNumber = Number(draft.storeNumber);
+
+    if (!invoiceNumber) {
+      alert('Enter the invoice number before saving this image.');
+      return;
+    }
+    if (!storeNumber || storeNumber <= 0) {
+      alert('Select the store number before saving this image.');
+      return;
+    }
+
+    this.http.post<{ objectName: string }>(`/api/invoices/misread-barcodes/resolve`, {
+      id: item.id,
+      invoiceNumber,
+      storeNumber
+    }).subscribe({
+      next: () => {
+        this.loadMisreadBarcodes();
+        this.loadInvoiceReconciliation();
+      },
+      error: e => {
+        alert(e.error?.message || 'Unable to resolve the selected misread barcode image.');
+      }
+    });
+  }
+
+  deleteMisreadBarcode(item: MisreadBarcodeItem) {
+    if (!confirm(`Delete the misread image "${item.fileName}"?`)) {
+      return;
+    }
+
+    this.http.delete(`/api/invoices/misread-barcodes/${encodeURIComponent(item.id)}`).subscribe({
+      next: () => {
+        this.loadMisreadBarcodes();
+      },
+      error: e => {
+        alert(e.error?.message || 'Unable to delete the selected misread barcode image.');
+      }
+    });
+  }
+
+  uploadExcel(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (this.selectedInvoiceUploadStore <= 0) {
+      this.uploadCsvStatus = 'Please select a store number before importing Excel data.';
+      this.uploadCsvProgress = 0;
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('excelFile', file, file.name);
+    formData.append('storeNumber', String(this.selectedInvoiceUploadStore));
+
+    this.uploadCsvStatus = 'Uploading Excel file...';
+    this.uploadCsvProgress = 0;
+    this.stopProgressTimer('excel');
+    this.startProgressTimer('excel');
+    this.http.post<any>('/api/invoices/upload-excel', formData, { reportProgress: true, observe: 'events' }).subscribe({
+      next: event => {
+        if (event.type === HttpEventType.Response && event.body) {
+          const result = event.body;
+          const imported = result?.imported ?? 0;
+          const errors = result?.errors?.length ? ` ${result.errors.join(' ')}` : '';
+          this.stopProgressTimer('excel');
+          this.uploadCsvProgress = 100;
+          this.uploadCsvStatus = `Excel imported successfully (${imported} invoice${imported === 1 ? '' : 's'}).${errors}`;
+          this.loadInvoiceReconciliation();
+          this.loadMisreadBarcodes();
+        }
+      },
+      error: e => {
+        this.stopProgressTimer('excel');
+        this.uploadCsvStatus = e.error?.message || 'Unable to import the selected Excel file.';
+        this.uploadCsvProgress = 0;
+      },
+      complete: () => {
+        input.value = '';
+      }
+    });
+  }
+
+  uploadImageFolder(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    if (this.selectedInvoiceUploadStore <= 0) {
+      this.uploadImagesStatus = 'Please select a store number before uploading invoice images.';
+      this.uploadImagesProgress = 0;
+      return;
+    }
+
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file, file.name);
+    }
+    formData.append('storeNumber', String(this.selectedInvoiceUploadStore));
+
+    this.uploadImagesStatus = 'Uploading images...';
+    this.uploadImagesProgress = 0;
+    this.stopProgressTimer('images');
+    this.startProgressTimer('images');
+    this.http.post<any>('/api/invoices/upload-images', formData, { reportProgress: true, observe: 'events' }).subscribe({
+      next: event => {
+        if (event.type === HttpEventType.Response && event.body) {
+          const result = event.body;
+          const processed = result?.processed ?? 0;
+          const errors = result?.errors?.length ? ` ${result.errors.join(' ')}` : '';
+          this.stopProgressTimer('images');
+          this.uploadImagesProgress = 100;
+          this.uploadImagesStatus = `Processed ${processed} image${processed === 1 ? '' : 's'}.${errors}`;
+          this.loadInvoiceReconciliation();
+          this.loadMisreadBarcodes();
+        }
+      },
+      error: e => {
+        this.stopProgressTimer('images');
+        this.uploadImagesStatus = e.error?.message || 'Unable to upload the selected image folder.';
+        this.uploadImagesProgress = 0;
+      },
+      complete: () => {
+        input.value = '';
+      }
     });
   }
 }

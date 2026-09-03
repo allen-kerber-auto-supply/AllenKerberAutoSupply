@@ -15,7 +15,7 @@ public sealed class FirestoreInvoiceImageRepository(
     public async Task<InvoiceImageLookup?> GetInvoiceImageLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();
-        string normalized = raw.PadLeft(6, '0');
+        string normalized = raw;
 
         if (storeNumber > 0)
         {
@@ -167,7 +167,7 @@ public sealed class FirestoreInvoiceImageRepository(
         if (string.IsNullOrWhiteSpace(objectName))
         {
             string raw = (invoiceNumber ?? string.Empty).Trim();
-            string normalized = raw.PadLeft(6, '0');
+            string normalized = raw;
             var candidatePaths = new List<string>();
             if (storeNumber > 0)
             {
@@ -209,9 +209,178 @@ public sealed class FirestoreInvoiceImageRepository(
         }
     }
 
+    private async Task UpdateStoreUploadStateAsync(int storeNumber, string invoiceNumber, bool isInvoice, CancellationToken cancellationToken)
+    {
+        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
+        {
+            return;
+        }
+
+        var normalized = (invoiceNumber ?? string.Empty).Trim();
+        var storeRef = firestore.Collection("stores").Document(storeNumber.ToString());
+
+        await firestore.RunTransactionAsync(async transaction =>
+        {
+            var snapshot = await transaction.GetSnapshotAsync(storeRef);
+            var storeRecord = snapshot.Exists ? snapshot.ConvertTo<StoreRecord>() : new StoreRecord { StoreNumber = storeNumber };
+            var state = storeRecord.UploadState ?? new StoreUploadState();
+            state.InvoiceKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            state.ImageKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+            if (isInvoice)
+            {
+                state.InvoiceKeys[normalized] = true;
+            }
+            else
+            {
+                state.ImageKeys[normalized] = true;
+            }
+
+            var invoiceKeys = state.InvoiceKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var imageKeys = state.ImageKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            state.MissingInvoiceImages = invoiceKeys.Except(imageKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
+            state.MissingInvoices = imageKeys.Except(invoiceKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
+            state.UpdatedAt = Timestamp.GetCurrentTimestamp();
+
+            storeRecord.StoreNumber = storeNumber;
+            storeRecord.UploadState = state;
+            transaction.Set(storeRef, storeRecord);
+        }, cancellationToken: cancellationToken);
+    }
+
+    public async Task<string> SaveMisreadBarcodeAsync(Stream imageStream, string fileName, string contentType, CancellationToken cancellationToken = default)
+    {
+        if (imageStream is null)
+            throw new ArgumentNullException(nameof(imageStream));
+
+        if (imageStream.CanSeek)
+            imageStream.Position = 0;
+
+        var createdUtc = DateTime.UtcNow;
+        var extension = Path.GetExtension(fileName);
+        var filename = createdUtc.ToString("yyyyMMddHHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(extension))
+            extension = Path.GetExtension(contentType == "application/pdf" ? ".pdf" : ".png");
+        var objectName = $"misread_barcodes/{filename}{extension}";
+        var bucketName = gcpOptions.Value.ImageBucket;
+        var contentTypeValue = string.IsNullOrWhiteSpace(contentType) ? "image/png" : contentType;
+
+        await storageClient.UploadObjectAsync(bucketName, objectName, contentTypeValue, imageStream, cancellationToken: cancellationToken);
+
+        var id = filename;
+        var record = new MisreadBarcodeRecord
+        {
+            Id = id,
+            FileName = string.IsNullOrWhiteSpace(fileName) ? $"{filename}{extension}" : fileName,
+            ObjectName = objectName,
+            BucketName = bucketName,
+            ContentType = contentTypeValue,
+            CreatedUtc = Timestamp.FromDateTime(DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc))
+        };
+
+        await firestore.Collection("misread_barcodes").Document(id).SetAsync(record, cancellationToken: cancellationToken);
+        return id;
+    }
+
+    public async Task<List<MisreadBarcodeRecord>> ListMisreadBarcodesAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot = await firestore.Collection("misread_barcodes")
+            .OrderByDescending("createdUtc")
+            .GetSnapshotAsync(cancellationToken);
+
+        return snapshot.Documents
+            .Select(document =>
+            {
+                var record = document.ConvertTo<MisreadBarcodeRecord>();
+                record.Id = document.Id;
+                return record;
+            })
+            .ToList();
+    }
+
+    public async Task<MisreadBarcodeRecord?> GetMisreadBarcodeAsync(string id, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
+
+        var snapshot = await firestore.Collection("misread_barcodes").Document(id).GetSnapshotAsync(cancellationToken);
+        if (!snapshot.Exists)
+            return null;
+
+        var record = snapshot.ConvertTo<MisreadBarcodeRecord>();
+        record.Id = snapshot.Id;
+        return record;
+    }
+
+    public async Task<Stream?> GetMisreadBarcodeStreamAsync(string id, CancellationToken cancellationToken = default)
+    {
+        var record = await GetMisreadBarcodeAsync(id, cancellationToken);
+        if (record is null || string.IsNullOrWhiteSpace(record.ObjectName))
+            return null;
+
+        var stream = new MemoryStream();
+        try
+        {
+            await storageClient.DownloadObjectAsync(record.BucketName, record.ObjectName, stream, cancellationToken: cancellationToken);
+            stream.Position = 0;
+            return stream;
+        }
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task<string> ResolveMisreadBarcodeAsync(string id, string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("A misread barcode id is required.", nameof(id));
+        if (string.IsNullOrWhiteSpace(invoiceNumber))
+            throw new ArgumentException("An invoice number is required.", nameof(invoiceNumber));
+        if (storeNumber <= 0)
+            throw new ArgumentException("A store number is required.", nameof(storeNumber));
+
+        var record = await GetMisreadBarcodeAsync(id, cancellationToken)
+            ?? throw new InvalidOperationException("The selected misread barcode record no longer exists.");
+
+        using var stream = await GetMisreadBarcodeStreamAsync(id, cancellationToken)
+            ?? throw new InvalidOperationException("The selected image could not be loaded from storage.");
+
+        stream.Position = 0;
+        var destination = await InsertInvoiceImageAsync(invoiceNumber.Trim(), storeNumber, stream, record.ContentType, false, 1, cancellationToken);
+        await DeleteMisreadBarcodeAsync(id, cancellationToken);
+        return destination;
+    }
+
+    public async Task DeleteMisreadBarcodeAsync(string id, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return;
+
+        var record = await GetMisreadBarcodeAsync(id, cancellationToken);
+        if (record is null)
+        {
+            await firestore.Collection("misread_barcodes").Document(id).DeleteAsync(cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(record.ObjectName))
+        {
+            try
+            {
+                await storageClient.DeleteObjectAsync(record.BucketName, record.ObjectName, cancellationToken: cancellationToken);
+            }
+            catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        await firestore.Collection("misread_barcodes").Document(id).DeleteAsync(cancellationToken: cancellationToken);
+    }
+
     public async Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default)
     {
-        string normalized = (invoiceNumber ?? string.Empty).Trim().PadLeft(6, '0');
+        string normalized = (invoiceNumber ?? string.Empty).Trim();
 
         if (invoiceOnly)
         {
@@ -281,6 +450,8 @@ public sealed class FirestoreInvoiceImageRepository(
 
             transaction.Set(docRef, lookup);
         }, cancellationToken: cancellationToken);
+
+        await UpdateStoreUploadStateAsync(storeNumber, normalized, isInvoice: false, cancellationToken);
 
         // Update HasImages flag in invoices collection if invoice exists
         var invoiceRef = firestore.Collection("invoices").Document($"{storeNumber}_{normalized}");
