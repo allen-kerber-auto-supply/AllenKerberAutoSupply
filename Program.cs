@@ -6,6 +6,7 @@ using AllenKerberAutoSupply.Services;
 using AllenKerberAutoSupply;
 using Google.Cloud.Firestore;
 using Google.Cloud.Storage.V1;
+using Grpc.Core;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -75,6 +76,12 @@ var app = builder.Build();
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
     var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    if (exception is RpcException { StatusCode: StatusCode.Cancelled } && context.RequestAborted.IsCancellationRequested)
+    {
+        context.Response.StatusCode = 499;
+        return;
+    }
+
     app.Logger.LogError(exception, "Unhandled exception processing {Path}", context.Request.Path);
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
     await Results.Problem("An unexpected error occurred. Please try again.").ExecuteAsync(context);

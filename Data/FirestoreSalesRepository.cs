@@ -256,11 +256,13 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     // Sales Reps
     public async Task<IReadOnlyList<SalesRep>> GetSalesRepListAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await firestore.Collection("sales_reps").GetSnapshotAsync(cancellationToken);
+        var snapshot = await firestore.Collection("sales_reps")
+            .WhereEqualTo(nameof(SalesRep.Status), "A")
+            .GetSnapshotAsync(cancellationToken);
 
         return snapshot.Documents
             .Select(MapSalesRep)
-            .Where(r => string.Equals(r.Status, "A", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(r.RepEmail))
+            .Where(r => !string.IsNullOrWhiteSpace(r.RepEmail))
             .OrderBy(r => r.RepName)
             .ToList();
     }
@@ -322,7 +324,13 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     // Sales Customers & Account Assignments
     public async Task<IReadOnlyList<SalesCustomer>> GetSalesCustomersAsync(string? salesRepEmail, CancellationToken cancellationToken = default)
     {
-        var snapshot = await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken);
+        Query query = firestore.Collection("sales_customers");
+        if (!string.IsNullOrWhiteSpace(salesRepEmail))
+        {
+            query = query.WhereArrayContains(nameof(SalesCustomer.AssignedSalesReps), salesRepEmail.Trim().ToLowerInvariant());
+        }
+
+        var snapshot = await query.GetSnapshotAsync(cancellationToken);
         List<SalesCustomer> customers;
 
         if (snapshot.Documents.Count > 0)
@@ -351,16 +359,9 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
                 .ToList();
         }
 
-        if (string.IsNullOrWhiteSpace(salesRepEmail))
-        {
-            return customers
-                .OrderBy(c => c.CustomerName)
-                .ToList();
-        }
-
-        string email = salesRepEmail.Trim().ToLowerInvariant();
         return customers
-            .Where(c => c.AssignedSalesReps.Any(r => string.Equals(r, email, StringComparison.OrdinalIgnoreCase)))
+            .Where(c => string.IsNullOrWhiteSpace(salesRepEmail) ||
+                        c.AssignedSalesReps.Any(r => string.Equals(r, salesRepEmail.Trim(), StringComparison.OrdinalIgnoreCase)))
             .OrderBy(c => c.CustomerName)
             .ToList();
     }
@@ -532,13 +533,19 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         var start = Timestamp.FromDateTime(DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Utc));
         var end = Timestamp.FromDateTime(DateTime.SpecifyKind(toDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc));
 
-        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        var query = firestore.Collection("sales_calls")
+            .WhereEqualTo(nameof(SalesCall.Status), 1)
+            .WhereGreaterThanOrEqualTo(nameof(SalesCall.CallDate), start)
+            .WhereLessThanOrEqualTo(nameof(SalesCall.CallDate), end);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+        }
+
+        var snapshot = await query.GetSnapshotAsync(cancellationToken);
 
         return snapshot.Documents
             .Select(MapSalesCall)
-            .Where(c => c.Status == 1)
-            .Where(c => string.IsNullOrWhiteSpace(email) || string.Equals(c.SalesRepEmail, email, StringComparison.OrdinalIgnoreCase))
-            .Where(c => c.CallDate >= start && c.CallDate <= end)
             .OrderByDescending(c => c.CallDate)
             .ToList();
     }
@@ -549,7 +556,9 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         if (string.IsNullOrWhiteSpace(name))
             return [];
 
-        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        var snapshot = await firestore.Collection("sales_calls")
+            .WhereEqualTo(nameof(SalesCall.AccountName), name)
+            .GetSnapshotAsync(cancellationToken);
 
         return snapshot.Documents
             .Select(MapSalesCall)
@@ -563,13 +572,24 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
         var endOfFromDate = Timestamp.FromDateTime(DateTime.SpecifyKind(fromDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc));
 
-        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        var callDateQuery = firestore.Collection("sales_calls")
+            .WhereEqualTo(nameof(SalesCall.Status), 0)
+            .WhereLessThanOrEqualTo(nameof(SalesCall.CallDate), endOfFromDate);
+        var followUpDateQuery = firestore.Collection("sales_calls")
+            .WhereEqualTo(nameof(SalesCall.Status), 0)
+            .WhereLessThanOrEqualTo(nameof(SalesCall.FollowUpDate), endOfFromDate);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            callDateQuery = callDateQuery.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+            followUpDateQuery = followUpDateQuery.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+        }
 
-        var calls = snapshot.Documents
-            .Select(MapSalesCall)
-            .Where(c => c.Status == 0)
-            .Where(c => string.IsNullOrWhiteSpace(email) || string.Equals(c.SalesRepEmail, email, StringComparison.OrdinalIgnoreCase))
-            .Where(c => (c.CallDate.HasValue && c.CallDate <= endOfFromDate) || (c.FollowUpDate.HasValue && c.FollowUpDate <= endOfFromDate))
+        var callDateSnapshot = await callDateQuery.GetSnapshotAsync(cancellationToken);
+        var followUpDateSnapshot = await followUpDateQuery.GetSnapshotAsync(cancellationToken);
+        var calls = callDateSnapshot.Documents
+            .Concat(followUpDateSnapshot.Documents)
+            .GroupBy(document => document.Id)
+            .Select(group => MapSalesCall(group.First()))
             .OrderBy(c => c.CallDate ?? c.FollowUpDate)
             .ToList();
 
@@ -580,12 +600,17 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
 
-        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        var query = firestore.Collection("sales_calls")
+            .WhereEqualTo(nameof(SalesCall.Status), 1);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+        }
+
+        var snapshot = await query.GetSnapshotAsync(cancellationToken);
 
         return snapshot.Documents
             .Select(MapSalesCall)
-            .Where(c => c.Status == 1)
-            .Where(c => string.IsNullOrWhiteSpace(email) || string.Equals(c.SalesRepEmail, email, StringComparison.OrdinalIgnoreCase))
             .GroupBy(c => new { c.AccountName, c.IsProspect })
             .Select(g => new AccountCallsSummary
             {
@@ -602,11 +627,16 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
 
-        var snapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        Query query = firestore.Collection("sales_calls");
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+        }
+
+        var snapshot = await query.GetSnapshotAsync(cancellationToken);
 
         var calls = snapshot.Documents
             .Select(MapSalesCall)
-            .Where(c => string.IsNullOrWhiteSpace(email) || string.Equals(c.SalesRepEmail, email, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(c => c.CallDate ?? c.CreatedDate)
             .ToList();
 
@@ -628,18 +658,20 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     public async Task<bool> InsertCallRecordAsync(SalesCall call, CancellationToken cancellationToken = default)
     {
         string accountName = (call.AccountName ?? string.Empty).Trim();
-        var allCalls = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
-        int nextCallId = allCalls.Documents.Count > 0
-            ? allCalls.Documents.Select(d => MapSalesCall(d).CallID).DefaultIfEmpty(0).Max() + 1
+        var latestCallSnapshot = await firestore.Collection("sales_calls")
+            .OrderByDescending(nameof(SalesCall.CallID))
+            .Limit(1)
+            .GetSnapshotAsync(cancellationToken);
+        int nextCallId = latestCallSnapshot.Documents.Count > 0
+            ? MapSalesCall(latestCallSnapshot.Documents[0]).CallID + 1
             : 1;
 
         // Check if account name exists in sales_customers to set IsProspect
-        var allCust = await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken);
-        bool customerExists = allCust.Documents.Any(d =>
-        {
-            var c = MapSalesCustomer(d);
-            return string.Equals(c.CustomerName, accountName, StringComparison.OrdinalIgnoreCase);
-        });
+        var customerSnapshot = await firestore.Collection("sales_customers")
+            .WhereEqualTo(nameof(SalesCustomer.CustomerName), accountName)
+            .Limit(1)
+            .GetSnapshotAsync(cancellationToken);
+        bool customerExists = customerSnapshot.Documents.Count > 0;
 
         call.CallID = nextCallId;
         call.CreatedDate ??= Timestamp.GetCurrentTimestamp();

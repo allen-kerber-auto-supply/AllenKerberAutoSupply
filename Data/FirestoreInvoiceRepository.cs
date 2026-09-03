@@ -68,7 +68,11 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
             var currentState = storeRecord.UploadState ?? new StoreUploadState();
             return new InvoiceUploadReconciliation
             {
-                MissingInvoiceImages = currentState.MissingInvoiceImages ?? [],
+                MissingInvoiceImages = await GetMissingInvoiceImageDetailsAsync(
+                    storeNumber,
+                    currentState.MissingInvoiceImages ?? [],
+                    cancellationToken),
+                MissingInvoiceImageKeys = currentState.MissingInvoiceImages ?? [],
                 MissingInvoices = currentState.MissingInvoices ?? []
             };
         }
@@ -110,8 +114,51 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
 
         return new InvoiceUploadReconciliation
         {
-            MissingInvoiceImages = uploadState.MissingInvoiceImages,
+            MissingInvoiceImages = invoiceSnapshot.Documents
+                .Select(document => document.ConvertTo<Invoice>())
+                .Where(invoice => uploadState.MissingInvoiceImages.Contains(
+                    GetNormalizedInvoiceNumber(invoice.InvoiceNumber),
+                    StringComparer.OrdinalIgnoreCase))
+                .Select(ToMissingInvoiceImage)
+                .OrderBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            MissingInvoiceImageKeys = uploadState.MissingInvoiceImages,
             MissingInvoices = uploadState.MissingInvoices
+        };
+    }
+
+    private async Task<List<InvoiceUploadMissingImage>> GetMissingInvoiceImageDetailsAsync(
+        int storeNumber,
+        IReadOnlyCollection<string> missingInvoiceKeys,
+        CancellationToken cancellationToken)
+    {
+        if (missingInvoiceKeys.Count == 0)
+        {
+            return [];
+        }
+
+        var invoiceSnapshot = await firestore.Collection("invoices")
+            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+
+        return invoiceSnapshot.Documents
+            .Select(document => document.ConvertTo<Invoice>())
+            .Where(invoice => missingInvoiceKeys.Contains(
+                GetNormalizedInvoiceNumber(invoice.InvoiceNumber),
+                StringComparer.OrdinalIgnoreCase))
+            .Select(ToMissingInvoiceImage)
+            .OrderBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static InvoiceUploadMissingImage ToMissingInvoiceImage(Invoice invoice)
+    {
+        return new InvoiceUploadMissingImage
+        {
+            InvoiceNumber = invoice.InvoiceNumber,
+            InvoiceDate = invoice.InvoiceDate?.ToDateTime(),
+            CustomerName = invoice.CustomerName,
+            InvoiceAmount = invoice.InvoiceAmount
         };
     }
 
@@ -281,25 +328,37 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
             .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
             .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
 
-        var snapshot = await query.GetSnapshotAsync(cancellationToken);
+        var snapshots = new List<QuerySnapshot>();
+        if (targetInvoiceNumbers.Count == 0)
+        {
+            snapshots.Add(await query.GetSnapshotAsync(cancellationToken));
+        }
+        else
+        {
+            foreach (var invoiceNumberChunk in targetInvoiceNumbers.Chunk(30))
+            {
+                var chunkQuery = query.WhereIn(
+                    nameof(Invoice.InvoiceNumber),
+                    invoiceNumberChunk.Cast<object>());
+                snapshots.Add(await chunkQuery.GetSnapshotAsync(cancellationToken));
+            }
+        }
+
         var results = new List<StatementInvoiceItem>();
 
-        foreach (var doc in snapshot.Documents)
+        foreach (var doc in snapshots.SelectMany(snapshot => snapshot.Documents))
         {
             var invoice = doc.ConvertTo<Invoice>();
-            if (targetInvoiceNumbers.Count == 0 || targetInvoiceNumbers.Contains(invoice.InvoiceNumber))
+            results.Add(new StatementInvoiceItem
             {
-                results.Add(new StatementInvoiceItem
-                {
-                    InvoiceNumber = invoice.InvoiceNumber,
-                    InvoiceDate = invoice.InvoiceDate?.ToDateTime(),
-                    InvoiceAmount = invoice.InvoiceAmount,
-                    VendorId = $"Vendor Number: {customer?.VendorId ?? string.Empty}",
-                    StoreNumber = $"800005{invoice.StoreNumber.ToString().PadLeft(3, '0')}",
-                    StatementOrInvoice = customer?.StatementOrInvoice ?? "I",
-                    CustomerName = customer?.CustomerName ?? invoice.CustomerName
-                });
-            }
+                InvoiceNumber = invoice.InvoiceNumber,
+                InvoiceDate = invoice.InvoiceDate?.ToDateTime(),
+                InvoiceAmount = invoice.InvoiceAmount,
+                VendorId = $"Vendor Number: {customer?.VendorId ?? string.Empty}",
+                StoreNumber = $"800005{invoice.StoreNumber.ToString().PadLeft(3, '0')}",
+                StatementOrInvoice = customer?.StatementOrInvoice ?? "I",
+                CustomerName = customer?.CustomerName ?? invoice.CustomerName
+            });
         }
 
         return results.OrderBy(r => r.InvoiceNumber).ToList();
@@ -330,7 +389,7 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
             ImageObjectName = string.Empty
         };
 
-        await docRef.SetAsync(invoice, SetOptions.MergeAll, cancellationToken);
+        await docRef.SetAsync(invoice, SetOptions.Overwrite, cancellationToken);
         await UpdateStoreUploadStateAsync(storeNumber, normalized, isInvoice: true, cancellationToken);
         return true;
     }

@@ -32,6 +32,15 @@ public sealed class MisreadBarcodeRecord
 
 public sealed class InvoiceUploadReconciliation
 {
-    public List<string> MissingInvoiceImages { get; set; } = [];
+    public List<InvoiceUploadMissingImage> MissingInvoiceImages { get; set; } = [];
+    public List<string> MissingInvoiceImageKeys { get; set; } = [];
     public List<string> MissingInvoices { get; set; } = [];
+}
+
+public sealed class InvoiceUploadMissingImage
+{
+    public string InvoiceNumber { get; set; } = string.Empty;
+    public DateTime? InvoiceDate { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public double InvoiceAmount { get; set; }
 }
