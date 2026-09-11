@@ -851,14 +851,14 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
   <div *ngIf="emailModalOpen" class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
     <div class="card modal email-modal">
       <p class="eyebrow">Email invoices</p>
-      <h2>Send selected invoices</h2>
+      <h2>Send Selected Invoices</h2>
       <section *ngIf="!emailGroups.length" class="muted-note">No invoices selected.</section>
       <section *ngFor="let group of emailGroups" class="email-group">
         <h3>{{group.customerName}} <small *ngIf="group.customerNumber">#{{group.customerNumber}}</small></h3>
         <p class="muted-note">Invoices: {{groupInvoiceLabel(group)}}</p>
         <div *ngIf="group.loadingEmails" class="muted-note">Loading email addresses...</div>
-        <div *ngIf="!group.loadingEmails && group.availableEmails.length" class="email-checklist">
-          <label *ngFor="let email of group.availableEmails" class="check">
+        <div *ngIf="!group.loadingEmails && group.availableEmails.length" class="email-checklist" style="display:grid;gap:.35rem">
+          <label *ngFor="let email of group.availableEmails" class="check" style="display:flex;margin:0;align-items:center;justify-content:flex-start;gap:.35rem;width:max-content">
             <input type="checkbox" [checked]="isGroupEmailSelected(group, email)" (change)="toggleGroupEmail(group, email, $any($event.target).checked)"> {{email}}
           </label>
         </div>
