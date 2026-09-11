@@ -850,7 +850,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
 
   <div *ngIf="emailModalOpen" class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
     <div class="card modal email-modal">
-      <p class="eyebrow">Email invoices</p>
+      <p class="eyebrow">Email Invoices</p>
       <h2>Send Selected Invoices</h2>
       <section *ngIf="!emailGroups.length" class="muted-note">No invoices selected.</section>
       <section *ngFor="let group of emailGroups" class="email-group">
