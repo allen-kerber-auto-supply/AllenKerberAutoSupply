@@ -261,24 +261,18 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
     public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();
+        if (raw.Length < 3 || !raw.All(char.IsDigit))
+        {
+            return [];
+        }
 
-        Query query = firestore.Collection("invoices")
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw + "\uf8ff")
-            .Limit(200);
+        Query query = firestore.Collection("invoices");
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        var invoices = snapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToList();
-
-        if (invoices.Count == 0 && !string.IsNullOrWhiteSpace(raw))
-        {
-            var fallbackSnapshot = await firestore.Collection("invoices")
-                .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw)
-                .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw + "\uf8ff")
-                .Limit(200)
-                .GetSnapshotAsync(cancellationToken);
-            invoices = fallbackSnapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToList();
-        }
+        var invoices = snapshot.Documents
+            .Select(d => d.ConvertTo<Invoice>())
+            .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         return invoices.OrderBy(i => i.InvoiceNumber).ToList();
     }
@@ -286,26 +280,19 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
     public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByInvoiceNumberAndCustomerAsync(string invoiceNumber, int customerNumber, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();
+        if (raw.Length < 3 || !raw.All(char.IsDigit))
+        {
+            return [];
+        }
 
         Query query = firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw + "\uf8ff")
-            .Limit(200);
+            .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber);
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        var invoices = snapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToList();
-
-        if (invoices.Count == 0 && !string.IsNullOrWhiteSpace(raw))
-        {
-            var fallbackSnapshot = await firestore.Collection("invoices")
-                .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)
-                .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw)
-                .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceNumber), raw + "\uf8ff")
-                .Limit(200)
-                .GetSnapshotAsync(cancellationToken);
-            invoices = fallbackSnapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToList();
-        }
+        var invoices = snapshot.Documents
+            .Select(d => d.ConvertTo<Invoice>())
+            .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         return invoices.OrderBy(i => i.InvoiceNumber).ToList();
     }

@@ -33,11 +33,17 @@ public sealed class InvoicesController(
     {
         if (!string.IsNullOrWhiteSpace(invoiceNumber))
         {
+            string normalizedInvoiceNumber = invoiceNumber.Trim();
+            if (normalizedInvoiceNumber.Length < 3 || !normalizedInvoiceNumber.All(char.IsDigit))
+            {
+                return BadRequest("Invoice number search must contain at least 3 digits.");
+            }
+
             if (!string.IsNullOrWhiteSpace(customerNumber) && int.TryParse(customerNumber, out int custNo))
             {
-                return Ok(await repository.GetInvoiceDataByInvoiceNumberAndCustomerAsync(invoiceNumber, custNo, cancellationToken));
+                return Ok(await repository.GetInvoiceDataByInvoiceNumberAndCustomerAsync(normalizedInvoiceNumber, custNo, cancellationToken));
             }
-            return Ok(await repository.GetInvoiceDataByInvoiceNumberAsync(invoiceNumber, cancellationToken));
+            return Ok(await repository.GetInvoiceDataByInvoiceNumberAsync(normalizedInvoiceNumber, cancellationToken));
         }
 
         return Ok(await repository.FindAsync(invoiceNumber, customerNumber, cancellationToken));
