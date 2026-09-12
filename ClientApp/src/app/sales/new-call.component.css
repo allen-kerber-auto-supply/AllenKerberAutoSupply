@@ -4,6 +4,36 @@
 
 .form-card, .history-sidebar { min-width: 0; }
 
+.call-timing-grid {
+  grid-template-areas:
+    "date date"
+    "time duration"
+    "rep rep";
+}
+
+.call-date-field { grid-area: date; }
+
+.call-time-field { grid-area: time; }
+
+.call-duration-field { grid-area: duration; }
+
+.sales-rep-field { grid-area: rep; align-self: start; }
+
+.call-duration-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.call-duration-field legend {
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .time-parts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -11,9 +41,39 @@
   align-items: center;
 }
 
+.input-error {
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 400;
+  margin-top: 0.2rem;
+  display: block;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .time-parts span {
   font-size: 1rem;
   font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .call-timing-grid {
+    grid-template-areas:
+      "date"
+      "time"
+      "duration"
+      "rep";
+  }
 }
 
 @media (max-width: 980px) {
