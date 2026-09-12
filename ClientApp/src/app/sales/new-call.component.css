@@ -13,6 +13,21 @@
   align-items: start;
 }
 
+.duration-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.duration-fieldset legend {
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .time-parts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

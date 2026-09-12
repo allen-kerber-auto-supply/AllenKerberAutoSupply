@@ -19,24 +19,25 @@
           <label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
           <div class="form-grid-2 call-timing-grid">
             <label>Call Time
-              <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null" aria-label="Call time">
+              <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null">
               <small *ngIf="callTimeError" id="call-time-error" class="field-error">{{callTimeError}}</small>
             </label>
-            <label>Call Duration
+            <fieldset class="duration-fieldset">
+              <legend>Call Duration</legend>
               <div class="time-parts">
-                <div class="time-part-field">
-                  <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationTotalError ? (durationHoursError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationHoursError || durationTotalError ? 'true' : null" aria-label="Call duration hours">
+                <label class="time-part-field">Hours
+                  <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationTotalError ? (durationHoursError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationHoursError || durationTotalError ? 'true' : null">
                   <small *ngIf="durationHoursError" id="duration-hours-error" class="field-error">{{durationHoursError}}</small>
-                </div>
-                <span>:</span>
-                <div class="time-part-field">
-                  <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required [class.invalid-input]="durationMinutesError || durationTotalError" [attr.aria-describedby]="(durationMinutesError ? 'duration-minutes-error' : '') + (durationTotalError ? (durationMinutesError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationMinutesError || durationTotalError ? 'true' : null" aria-label="Call duration minutes">
+                </label>
+                <span aria-hidden="true">:</span>
+                <label class="time-part-field">Minutes
+                  <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required [class.invalid-input]="durationMinutesError || durationTotalError" [attr.aria-describedby]="(durationMinutesError ? 'duration-minutes-error' : '') + (durationTotalError ? (durationMinutesError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationMinutesError || durationTotalError ? 'true' : null">
                   <small *ngIf="durationMinutesError" id="duration-minutes-error" class="field-error">{{durationMinutesError}}</small>
-                </div>
+                </label>
               </div>
               <small *ngIf="durationTotalError" id="duration-total-error" class="field-error">{{durationTotalError}}</small>
               <small *ngIf="!durationTotalError" class="input-hint">Duration cannot exceed 8:00.</small>
-            </label>
+            </fieldset>
           </div>
         </div>
         <label>Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label>

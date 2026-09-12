@@ -122,12 +122,17 @@ export class NewCallComponent implements OnChanges {
       return;
     }
 
+    const parsedCallTime = this.parseCallTime();
+    if (!parsedCallTime) {
+      this.callErrorMessage = 'Enter a valid call time.';
+      return;
+    }
+
     this.savingCall = true;
     this.callErrorMessage = '';
-    const [callTimeHours, callTimeMinutes] = this.callTime.split(':').map(part => Number.parseInt(part, 10));
     const payload: SalesCall = {
       ...this.newCall,
-      callDate: `${this.newCall.callDate}T${padTime(callTimeHours)}:${padTime(callTimeMinutes)}:00`,
+      callDate: `${this.newCall.callDate}T${padTime(parsedCallTime.hours)}:${padTime(parsedCallTime.minutes)}:${padTime(parsedCallTime.seconds)}`,
       callDuration: this.durationHours * 60 + this.durationMinutes,
       followUpDate: this.newCall.followUpDate || undefined
     };
@@ -170,11 +175,24 @@ export class NewCallComponent implements OnChanges {
       return 'Call time is required.';
     }
 
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(this.callTime)) {
+    if (!this.parseCallTime()) {
       return 'Enter a valid call time.';
     }
 
     return '';
+  }
+
+  private parseCallTime(): { hours: number; minutes: number; seconds: number; } | null {
+    const match = this.callTime.match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      hours: Number.parseInt(match[1], 10),
+      minutes: Number.parseInt(match[2], 10),
+      seconds: Number.parseInt(match[3] || '0', 10)
+    };
   }
 
   private validateDurationHours(): string {
