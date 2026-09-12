@@ -1,1 +1,29 @@
 .lookup-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+.invoice-workspace,
+.invoice-layout,
+.invoice-results-col,
+.invoice-results-col .table {
+	min-height: 0;
+}
+
+.invoice-workspace {
+	margin-bottom: 2rem;
+}
+
+.invoice-results-col {
+	display: flex;
+	flex-direction: column;
+}
+
+.invoice-results-col .table {
+	display: flex;
+	flex-direction: column;
+}
+
+.table-scroll {
+	min-height: 0;
+	max-height: calc(100vh - 14rem);
+	overflow-x: auto;
+	overflow-y: auto;
+}
