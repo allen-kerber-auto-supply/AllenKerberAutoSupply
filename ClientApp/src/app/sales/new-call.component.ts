@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, NgModel } from '@angular/forms';
 import { SalesCall, SalesCustomer, SalesRep } from '../shared/models';
 import { SalesService } from './sales.service';
 
@@ -31,6 +31,7 @@ export class NewCallComponent implements OnChanges {
   loadingCustomerHistory = false;
   savingCall = false;
   callErrorMessage = '';
+  timingValidationAttempted = false;
   callTime = currentTimeValue();
   durationHours = 0;
   durationMinutes = 0;
@@ -57,10 +58,6 @@ export class NewCallComponent implements OnChanges {
     return this.validateCallTime();
   }
 
-  get callTimeDescribedBy(): string {
-    return this.callTimeValidationMessage ? 'call-time-hint call-time-error' : 'call-time-hint';
-  }
-
   get durationHoursValidationMessage(): string {
     return this.validateDurationHours();
   }
@@ -71,14 +68,6 @@ export class NewCallComponent implements OnChanges {
 
   get durationLimitValidationMessage(): string {
     return this.validateDurationLimit();
-  }
-
-  get durationHoursDescribedBy(): string | null {
-    return this.describeDurationField('duration-hours-error', this.durationHoursValidationMessage);
-  }
-
-  get durationMinutesDescribedBy(): string | null {
-    return this.describeDurationField('duration-minutes-error', this.durationMinutesValidationMessage);
   }
 
   isAssignedSalesCustomer(accountName: string): boolean {
@@ -119,6 +108,7 @@ export class NewCallComponent implements OnChanges {
     this.callTime = currentTimeValue();
     this.durationHours = 0;
     this.durationMinutes = 0;
+    this.timingValidationAttempted = false;
     this.setDefaultRep();
     this.selectedCustomerHistory = [];
     this.callErrorMessage = '';
@@ -132,17 +122,20 @@ export class NewCallComponent implements OnChanges {
 
     const validationMessage = this.validateCallTiming();
     if (validationMessage) {
-      this.callErrorMessage = '';
+      this.timingValidationAttempted = true;
+      this.callErrorMessage = 'Please correct the highlighted call time or duration fields.';
       return;
     }
 
     const parsedCallTime = this.parseCallTime(this.callTime);
     if (!parsedCallTime) {
-      this.callErrorMessage = '';
+      this.timingValidationAttempted = true;
+      this.callErrorMessage = 'Please correct the highlighted call time or duration fields.';
       return;
     }
 
     this.savingCall = true;
+    this.timingValidationAttempted = false;
     this.callErrorMessage = '';
     const payload: SalesCall = {
       ...this.newCall,
@@ -170,6 +163,37 @@ export class NewCallComponent implements OnChanges {
     if (repName) return repName;
     const rep = this.reps.find(item => (item.repEmail || item.email || '').toLowerCase() === (repEmail || '').toLowerCase());
     return rep?.repName || rep?.name || repEmail || 'Unassigned';
+  }
+
+  showFieldValidation(model: NgModel, message: string): boolean {
+    return !!message && (model.dirty || model.touched || this.timingValidationAttempted);
+  }
+
+  showDurationLimitValidation(hoursModel: NgModel, minutesModel: NgModel): boolean {
+    return !!this.durationLimitValidationMessage
+      && (hoursModel.dirty || hoursModel.touched || minutesModel.dirty || minutesModel.touched || this.timingValidationAttempted);
+  }
+
+  getCallTimeDescribedBy(model: NgModel): string {
+    return this.showFieldValidation(model, this.callTimeValidationMessage)
+      ? 'call-time-hint call-time-error'
+      : 'call-time-hint';
+  }
+
+  getDurationHoursDescribedBy(hoursModel: NgModel, minutesModel: NgModel): string | null {
+    const ids = [
+      this.showFieldValidation(hoursModel, this.durationHoursValidationMessage) ? 'duration-hours-error' : '',
+      this.showDurationLimitValidation(hoursModel, minutesModel) ? 'duration-limit-error' : ''
+    ].filter(Boolean);
+    return ids.length ? ids.join(' ') : null;
+  }
+
+  getDurationMinutesDescribedBy(hoursModel: NgModel, minutesModel: NgModel): string | null {
+    const ids = [
+      this.showFieldValidation(minutesModel, this.durationMinutesValidationMessage) ? 'duration-minutes-error' : '',
+      this.showDurationLimitValidation(hoursModel, minutesModel) ? 'duration-limit-error' : ''
+    ].filter(Boolean);
+    return ids.length ? ids.join(' ') : null;
   }
 
   private emptyCall(): SalesCall {
@@ -217,14 +241,6 @@ export class NewCallComponent implements OnChanges {
     return this.isWholeNumberInRange(hours, 0, 23) && this.isWholeNumberInRange(minutes, 0, 59)
       ? { hours, minutes }
       : null;
-  }
-
-  private describeDurationField(fieldErrorId: string, fieldMessage: string): string | null {
-    const ids = [
-      fieldMessage ? fieldErrorId : '',
-      this.durationLimitValidationMessage ? 'duration-limit-error' : ''
-    ].filter(Boolean);
-    return ids.length ? ids.join(' ') : null;
   }
 
   private setDefaultRep(): void {
