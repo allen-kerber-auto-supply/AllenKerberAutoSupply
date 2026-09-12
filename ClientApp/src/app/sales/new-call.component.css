@@ -4,16 +4,46 @@
 
 .form-card, .history-sidebar { min-width: 0; }
 
+.call-date-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.call-timing-grid {
+  align-items: start;
+}
+
 .time-parts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0.5rem;
-  align-items: center;
+  align-items: start;
+}
+
+.time-part-field {
+  display: grid;
+  gap: 0.25rem;
 }
 
 .time-parts span {
   font-size: 1rem;
   font-weight: 700;
+  padding-top: 0.8rem;
+}
+
+.field-error {
+  color: #b42318;
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.invalid-input {
+  border-color: #dc4d4d;
+}
+
+.invalid-input:focus {
+  outline: 3px solid color-mix(in srgb, #dc4d4d 25%, transparent);
+  border-color: #dc4d4d;
 }
 
 @media (max-width: 980px) {

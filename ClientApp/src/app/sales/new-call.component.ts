@@ -7,6 +7,7 @@ import { SalesService } from './sales.service';
 function today(): string { return new Date().toISOString().slice(0, 10); }
 function padTime(value: number): string { return value.toString().padStart(2, '0'); }
 function currentTimePart(getValue: (date: Date) => number): number { return getValue(new Date()); }
+function currentTimeValue(): string { return `${padTime(currentTimePart(date => date.getHours()))}:${padTime(currentTimePart(date => date.getMinutes()))}`; }
 
 @Component({
   selector: 'app-new-call',
@@ -28,8 +29,7 @@ export class NewCallComponent implements OnChanges {
   loadingCustomerHistory = false;
   savingCall = false;
   callErrorMessage = '';
-  callTimeHours = currentTimePart(date => date.getHours());
-  callTimeMinutes = currentTimePart(date => date.getMinutes());
+  callTime = currentTimeValue();
   durationHours = 0;
   durationMinutes = 0;
 
@@ -49,6 +49,22 @@ export class NewCallComponent implements OnChanges {
 
   get hasInvalidCallTiming(): boolean {
     return !!this.validateCallTiming();
+  }
+
+  get callTimeError(): string {
+    return this.validateCallTime();
+  }
+
+  get durationHoursError(): string {
+    return this.validateDurationHours();
+  }
+
+  get durationMinutesError(): string {
+    return this.validateDurationMinutes();
+  }
+
+  get durationTotalError(): string {
+    return this.validateDurationTotal();
   }
 
   isAssignedSalesCustomer(accountName: string): boolean {
@@ -86,8 +102,7 @@ export class NewCallComponent implements OnChanges {
 
   resetNewCallForm(): void {
     this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
-    this.callTimeHours = currentTimePart(date => date.getHours());
-    this.callTimeMinutes = currentTimePart(date => date.getMinutes());
+    this.callTime = currentTimeValue();
     this.durationHours = 0;
     this.durationMinutes = 0;
     this.setDefaultRep();
@@ -109,9 +124,10 @@ export class NewCallComponent implements OnChanges {
 
     this.savingCall = true;
     this.callErrorMessage = '';
+    const [callTimeHours, callTimeMinutes] = this.callTime.split(':').map(part => Number.parseInt(part, 10));
     const payload: SalesCall = {
       ...this.newCall,
-      callDate: `${this.newCall.callDate}T${padTime(this.callTimeHours)}:${padTime(this.callTimeMinutes)}:00`,
+      callDate: `${this.newCall.callDate}T${padTime(callTimeHours)}:${padTime(callTimeMinutes)}:00`,
       callDuration: this.durationHours * 60 + this.durationMinutes,
       followUpDate: this.newCall.followUpDate || undefined
     };
@@ -142,31 +158,47 @@ export class NewCallComponent implements OnChanges {
   }
 
   private validateCallTiming(): string {
-    if (!this.isWholeNumberInRange(this.callTimeHours, 0, 23)) {
-      return 'Call time hours must be between 0 and 23.';
+    return this.callTimeError || this.durationHoursError || this.durationMinutesError || this.durationTotalError;
+  }
+
+  private isWholeNumberInRange(value: number, min: number, max: number): boolean {
+    return Number.isInteger(value) && value >= min && value <= max;
+  }
+
+  private validateCallTime(): string {
+    if (!this.callTime) {
+      return 'Call time is required.';
     }
 
-    if (!this.isWholeNumberInRange(this.callTimeMinutes, 0, 59)) {
-      return 'Call time minutes must be between 0 and 59.';
-    }
-
-    if (!this.isWholeNumberInRange(this.durationHours, 0, 8)) {
-      return 'Call duration hours must be between 0 and 8.';
-    }
-
-    if (!this.isWholeNumberInRange(this.durationMinutes, 0, 59)) {
-      return 'Call duration minutes must be between 0 and 59.';
-    }
-
-    if (this.durationHours === 8 && this.durationMinutes > 0) {
-      return 'Call duration cannot exceed 8 hours.';
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(this.callTime)) {
+      return 'Enter a valid call time.';
     }
 
     return '';
   }
 
-  private isWholeNumberInRange(value: number, min: number, max: number): boolean {
-    return Number.isInteger(value) && value >= min && value <= max;
+  private validateDurationHours(): string {
+    if (!this.isWholeNumberInRange(this.durationHours, 0, 8)) {
+      return 'Hours must be a whole number between 0 and 8.';
+    }
+
+    return '';
+  }
+
+  private validateDurationMinutes(): string {
+    if (!this.isWholeNumberInRange(this.durationMinutes, 0, 59)) {
+      return 'Minutes must be a whole number between 0 and 59.';
+    }
+
+    return '';
+  }
+
+  private validateDurationTotal(): string {
+    if (!this.durationHoursError && !this.durationMinutesError && this.durationHours === 8 && this.durationMinutes > 0) {
+      return 'Call duration cannot exceed 8:00.';
+    }
+
+    return '';
   }
 
   private setDefaultRep(): void {
