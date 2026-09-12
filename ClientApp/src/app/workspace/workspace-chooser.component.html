@@ -1,0 +1,15 @@
+<section class="workspace">
+  <p class="eyebrow">Your workspace</p>
+  <h1>What are you working on?</h1>
+  <p>Choose an area to get started.</p>
+  <div class="grid">
+    <button class="app-card" (click)="selectWorkspace('sales')">
+      <i>S</i>
+      <span><small>Sales</small><b>Sales Calls</b><em>Manage prospect and customer sales calls.</em></span>&rarr;
+    </button>
+    <button class="app-card invoice" (click)="selectWorkspace('invoice')">
+      <i>I</i>
+      <span><small>Records</small><b>Invoices</b><em>Find customer purchase history.</em></span>&rarr;
+    </button>
+  </div>
+</section>

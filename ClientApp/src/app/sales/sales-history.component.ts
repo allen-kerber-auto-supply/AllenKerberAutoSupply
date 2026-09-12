@@ -1,0 +1,67 @@
+import { CommonModule } from '@angular/common';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { AccountSummary, SalesCall, SalesRep } from '../shared/models';
+
+export type HistoryViewMode = 'records' | 'summary';
+
+@Component({
+  selector: 'app-sales-history',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './sales-history.component.html',
+  styleUrl: './sales-history.component.css'
+})
+export class SalesHistoryComponent {
+  @Input() isAdmin = false;
+  @Input() viewMode: HistoryViewMode = 'records';
+  @Input() loading = false;
+  @Input() dateFrom = '';
+  @Input() dateTo = '';
+  @Input() accountFilter = '';
+  @Input() accountOptions: string[] = [];
+  @Input() selectedRep = '';
+  @Input() reps: SalesRep[] = [];
+  @Input() calls: SalesCall[] = [];
+  @Input() summaries: AccountSummary[] = [];
+  @Input() selectedSummaryAccount = '';
+  @Input() selectedSummaryCalls: SalesCall[] = [];
+  @Input() isProspect: (call: SalesCall) => boolean = () => false;
+  @Input() repDisplayName: (name?: string, email?: string) => string = (name, email) => name || email || '—';
+
+  @Output() viewModeChange = new EventEmitter<HistoryViewMode>();
+  @Output() filtersChanged = new EventEmitter<void>();
+  @Output() accountFilterChange = new EventEmitter<string>();
+  @Output() selectedRepChange = new EventEmitter<string>();
+  @Output() exportRequested = new EventEmitter<void>();
+  @Output() printRequested = new EventEmitter<void>();
+  @Output() callSelected = new EventEmitter<SalesCall>();
+  @Output() editRequested = new EventEmitter<SalesCall>();
+  @Output() deleteRequested = new EventEmitter<SalesCall>();
+  @Output() summarySelected = new EventEmitter<AccountSummary>();
+  @Output() summaryClosed = new EventEmitter<void>();
+
+  setViewMode(viewMode: HistoryViewMode) {
+    this.viewModeChange.emit(viewMode);
+    this.filtersChanged.emit();
+  }
+
+  onAccountFilterChanged(value: string) {
+    this.accountFilterChange.emit(value);
+    this.filtersChanged.emit();
+  }
+
+  onCardKeydown(event: KeyboardEvent, call: SalesCall) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.callSelected.emit(call);
+    }
+  }
+
+  onSummaryKeydown(event: KeyboardEvent, summary: AccountSummary) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.summarySelected.emit(summary);
+    }
+  }
+}

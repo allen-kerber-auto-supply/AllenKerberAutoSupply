@@ -1,0 +1,71 @@
+<div class="sales-tab-content">
+  <div class="card history-filter-card">
+    <div class="history-filter-top">
+      <div class="view-mode-toggle">
+        <button type="button" [class.active]="viewMode === 'records'" (click)="setViewMode('records')">Call Records</button>
+        <button type="button" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">Account Summary</button>
+      </div>
+      <div class="history-filter-actions">
+        <button type="button" *ngIf="viewMode === 'records' && calls.length" class="button secondary" (click)="exportRequested.emit()">Export CSV</button>
+        <button type="button" class="button secondary" (click)="printRequested.emit()">Printable Account List</button>
+      </div>
+    </div>
+    <div class="history-filters-grid">
+      <div class="date-range" *ngIf="viewMode === 'records'">
+        <label>From Date <input type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="filtersChanged.emit()"></label>
+        <label>To Date <input type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="filtersChanged.emit()"></label>
+      </div>
+      <label>Account Search
+        <div class="input-with-clear">
+          <input [ngModel]="accountFilter" list="historyAccountOptions" placeholder="Filter by account name..." (ngModelChange)="onAccountFilterChanged($event)">
+          <button *ngIf="accountFilter" class="clear-btn" type="button" title="Clear account search" (click)="onAccountFilterChanged('')">&times;</button>
+        </div>
+        <datalist id="historyAccountOptions"><option *ngFor="let accountName of accountOptions" [value]="accountName"></option></datalist>
+      </label>
+      <label *ngIf="isAdmin">Sales Rep Filter
+        <select [ngModel]="selectedRep" (ngModelChange)="selectedRepChange.emit($event); filtersChanged.emit()">
+          <option value="">All Sales Reps</option>
+          <option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}}</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div *ngIf="viewMode === 'records'" class="card table">
+    <div class="table-header-row"><h2>{{calls.length}} Call Record{{calls.length === 1 ? '' : 's'}}</h2></div>
+    <div *ngIf="loading" class="state"><p>Loading call history...</p></div>
+    <div *ngIf="!loading && calls.length" class="call-record-list">
+      <article *ngFor="let call of calls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+        <div class="call-record-header"><div class="status-stack"><span class="status-badge" [class.completed]="call.status === 1" [class.scheduled]="call.status === 0">{{call.status === 1 ? 'Completed' : 'Scheduled'}}</span><span *ngIf="isProspect(call)" class="status-badge prospect">Prospect</span></div><h3>{{call.accountName}}</h3></div>
+        <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
+        <div class="call-record-actions"><button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); editRequested.emit(call)">Edit</button><button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button></div>
+      </article>
+    </div>
+    <div *ngIf="!loading && !calls.length" class="state"><p>No call records found matching criteria.</p></div>
+  </div>
+
+  <div *ngIf="viewMode === 'summary'" class="card table">
+    <div class="table-header-row"><h2>Account Calls Summary ({{summaries.length}} Accounts)</h2></div>
+    <div *ngIf="loading" class="state"><p>Loading summaries...</p></div>
+    <div *ngIf="!loading && summaries.length" class="account-summary-panel">
+      <div class="account-summary-list">
+        <article *ngFor="let summary of summaries" class="account-summary-card" role="button" tabindex="0" (click)="summarySelected.emit(summary)" (keydown)="onSummaryKeydown($event, summary)">
+          <div class="account-summary-top"><h3>{{summary.accountName}}</h3><span class="status-badge completed">{{summary.totalCalls}} total</span></div>
+          <div class="summary-metrics"><div><span>Completed</span><b>{{summary.completedCalls}}</b></div><div><span>Scheduled</span><b>{{summary.scheduledCalls}}</b></div><div><span>Last</span><b>{{summary.lastCallDate ? (summary.lastCallDate | date:'M/d/yyyy') : '—'}}</b></div></div>
+        </article>
+      </div>
+      <div *ngIf="selectedSummaryAccount" class="account-summary-detail">
+        <div class="account-summary-detail-header"><h3>{{selectedSummaryAccount}}</h3><button class="button secondary view-btn" type="button" (click)="summaryClosed.emit()">Close</button></div>
+        <div *ngIf="selectedSummaryCalls.length" class="call-record-list">
+          <article *ngFor="let call of selectedSummaryCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+            <div class="call-record-header"><div class="status-stack"><span class="status-badge" [class.completed]="call.status === 1" [class.scheduled]="call.status === 0">{{call.status === 1 ? 'Completed' : 'Scheduled'}}</span><span *ngIf="isProspect(call)" class="status-badge prospect">Prospect</span></div><h3>{{call.accountName}}</h3></div>
+            <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
+            <div class="call-record-actions"><button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); editRequested.emit(call)">Edit</button><button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button></div>
+          </article>
+        </div>
+        <div *ngIf="!selectedSummaryCalls.length" class="state"><p>No calls found for this account.</p></div>
+      </div>
+    </div>
+    <div *ngIf="!loading && !summaries.length" class="state"><p>No accounts found.</p></div>
+  </div>
+</div>

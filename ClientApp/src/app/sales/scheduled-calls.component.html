@@ -1,0 +1,39 @@
+<div class="sales-tab-content">
+  <div class="card table">
+    <div class="table-header-row">
+      <div>
+        <h2>Scheduled Calls</h2>
+        <p class="muted-note">Upcoming and pending calls requiring attention</p>
+      </div>
+      <div class="table-actions">
+        <button class="button primary" type="button" (click)="newCallRequested.emit()">+ Log New Call</button>
+      </div>
+    </div>
+    <div *ngIf="loading" class="state"><p>Loading scheduled calls...</p></div>
+    <div *ngIf="!loading && calls.length" class="call-record-list">
+      <article *ngFor="let call of calls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+        <div class="call-record-header">
+          <div>
+            <h3>{{call.accountName}}</h3>
+            <p>{{call.contactName || 'No contact specified'}}</p>
+          </div>
+          <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">{{call.status===1 ? 'Completed' : 'Scheduled'}}</span>
+        </div>
+        <div class="call-record-meta">
+          <span><b>Call date</b> {{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span>
+          <span *ngIf="call.followUpDate"><b>Follow-up</b> {{call.followUpDate | date:'M/d/yyyy'}}</span>
+          <span><b>Rep</b> {{call.repName || call.salesRepEmail || call.repEmail || 'Unassigned'}}</span>
+        </div>
+        <p *ngIf="call.comments" class="call-record-comments">{{call.comments}}</p>
+        <div class="call-record-actions">
+          <button *ngIf="call.status===0" class="button secondary" type="button" (click)="$event.stopPropagation(); completeRequested.emit(call)">Mark Complete</button>
+          <button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button>
+        </div>
+      </article>
+    </div>
+    <div *ngIf="!loading && !calls.length" class="state">
+      <p>No scheduled calls found for the selected filter.</p>
+      <button class="button primary" type="button" (click)="newCallRequested.emit()">Log a Call</button>
+    </div>
+  </div>
+</div>

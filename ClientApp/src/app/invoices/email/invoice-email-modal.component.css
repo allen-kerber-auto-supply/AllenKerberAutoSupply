@@ -1,0 +1,8 @@
+:host {
+  display: contents;
+}
+
+.email-checklist {
+  display: grid;
+  gap: .35rem;
+}

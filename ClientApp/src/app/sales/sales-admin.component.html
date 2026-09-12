@@ -1,0 +1,49 @@
+<div class="sales-tab-content admin-grid">
+  <div class="card sales-admin-card">
+    <h2>Sales Representatives</h2>
+    <p class="muted-note">Manage sales reps available for call assignments.</p>
+    <form (ngSubmit)="addRepRequested.emit()" class="sales-admin-form">
+      <label>Rep Name <input [ngModel]="newRep.repName" (ngModelChange)="newRepChange.emit({repName: $event, repEmail: newRep.repEmail})" name="repName" required placeholder="John Doe"></label>
+      <label>Rep Email <input [ngModel]="newRep.repEmail" (ngModelChange)="newRepChange.emit({repName: newRep.repName, repEmail: $event})" name="repEmail" type="email" required placeholder="john@allenkerber.com"></label>
+      <button class="button primary" type="submit">Add Sales Rep</button>
+    </form>
+    <div class="table-scroll" style="max-height: 400px; margin-top: 1rem;">
+      <table><thead><tr><th>Name</th><th>Email</th><th></th></tr></thead><tbody>
+        <tr *ngFor="let rep of reps"><td><b>{{rep.repName || rep.name}}</b></td><td>{{rep.repEmail || rep.email}}</td><td class="action-cell"><button class="button danger view-btn" type="button" (click)="deleteRepRequested.emit(rep)">Remove</button></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="card sales-admin-card">
+    <h2>Customer Account Assignments</h2>
+    <p class="muted-note">Assign customer accounts to specific sales reps.</p>
+    <form (ngSubmit)="assignCustomerRequested.emit()" class="sales-admin-form">
+      <label>Account Name
+        <select [ngModel]="newCustomerName" (ngModelChange)="newCustomerNameChange.emit($event)" name="custAccountName" required>
+          <option value="" disabled>Select an unassigned customer</option>
+          <option *ngIf="!unassignedCustomers.length" value="" disabled>No unassigned customers available</option>
+          <option *ngFor="let customer of unassignedCustomers" [value]="customer.customerName">{{customer.customerName}}</option>
+        </select>
+      </label>
+      <label>Assigned Sales Rep
+        <select [ngModel]="selectedRepEmail" (ngModelChange)="selectedRepEmailChange.emit($event)" name="custRepEmail" required>
+          <option value="" disabled>Select a Sales Rep</option>
+          <option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option>
+        </select>
+      </label>
+      <button class="button primary" type="submit" [disabled]="!unassignedCustomers.length">Assign Account</button>
+      <p *ngIf="assignmentMessage" class="alert">{{assignmentMessage}}</p>
+    </form>
+    <div class="admin-table-filters" style="display: flex; gap: 0.5rem; margin-top: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+      <input [ngModel]="accountFilter" (ngModelChange)="accountFilterChange.emit($event); filtersChanged.emit()" placeholder="Search accounts..." style="flex: 1; min-width: 140px;">
+      <select [ngModel]="repFilter" (ngModelChange)="repFilterChange.emit($event); filtersChanged.emit()" style="min-width: 140px;">
+        <option value="">All Reps &amp; Unassigned</option><option value="__unassigned__">Unassigned Only</option>
+        <option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}}</option>
+      </select>
+    </div>
+    <div class="table-scroll" style="max-height: 400px; margin-top: 0.5rem;"><table>
+      <thead><tr><th>Account Name ({{customers.length}})</th><th>Assigned Rep(s)</th><th class="action-cell"></th></tr></thead>
+      <tbody><tr *ngFor="let customer of customers"><td><b>{{accountName(customer)}}</b></td><td>{{assignedReps(customer)}}</td><td class="action-cell"><button *ngIf="hasAssignments(customer)" class="button danger view-btn" type="button" (click)="deleteCustomerRequested.emit(customer)">Remove</button></td></tr></tbody>
+    </table></div>
+  </div>
+</div>

@@ -1,0 +1,31 @@
+<div class="sales-tab-content new-call-layout">
+  <div class="card form-card">
+    <h2>Log Call or Follow-up</h2>
+    <p class="muted-note">Record customer interactions, schedule follow-ups, and review account history.</p>
+    <form (ngSubmit)="saveNewCall()" class="sales-form">
+      <div class="form-row">
+        <label>Account Name *<div class="input-with-clear">
+          <input [(ngModel)]="newCall.accountName" name="accountName" list="salesCustomerOptions" placeholder="Type or select account name" (change)="onAccountNameChange()" (blur)="onAccountNameChange()" required autocomplete="off">
+          <button *ngIf="newCall.accountName" class="clear-btn" type="button" title="Clear account name" (click)="newCall.accountName=''; onAccountNameChange()">&times;</button>
+        </div><datalist id="salesCustomerOptions"><option *ngFor="let accountName of accountNameOptions" [value]="accountName"></option></datalist></label>
+        <div class="account-type-indicator">
+          <span *ngIf="newCall.accountName && isAccountProspect(newCall.accountName)" class="status-badge prospect">Prospect Account</span>
+          <span *ngIf="newCall.accountName && isAssignedSalesCustomer(newCall.accountName)" class="status-badge customer">Assigned Customer</span>
+        </div>
+      </div>
+      <div class="form-grid-2"><label>Contact Name<input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person"></label><label>Phone Number<input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000"></label></div>
+      <div class="form-grid-2"><label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label><label>Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label></div>
+      <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>
+      <div class="form-grid-2"><label>Status<select [(ngModel)]="newCall.status" name="status"><option [ngValue]="1">Completed</option><option [ngValue]="0">Scheduled / Open</option></select></label><label>Follow-up Date (Optional)<input type="date" [(ngModel)]="newCall.followUpDate" name="followUpDate"><small *ngIf="newCall.followUpDate" class="input-hint">Automatically schedules a follow-up call on this date</small></label></div>
+      <div class="form-actions"><button class="button secondary" type="button" (click)="resetNewCallForm()">Clear Form</button><button class="button primary" type="submit" [disabled]="savingCall || !newCall.accountName.trim()">{{savingCall ? 'Saving...' : 'Save Call Record'}}</button></div>
+      <p *ngIf="callErrorMessage" class="alert">{{callErrorMessage}}</p>
+    </form>
+  </div>
+  <div class="card history-sidebar">
+    <div class="history-sidebar-header"><h3>Account History</h3><p *ngIf="newCall.accountName" class="eyebrow">{{newCall.accountName}}</p></div>
+    <div *ngIf="!newCall.accountName" class="state muted-state"><p>Select or enter an account name to view previous calls and notes.</p></div>
+    <div *ngIf="newCall.accountName && loadingCustomerHistory" class="state muted-state"><p>Loading history...</p></div>
+    <div *ngIf="newCall.accountName && !loadingCustomerHistory && !selectedCustomerHistory.length" class="state muted-state"><p>No prior call records found for this account.</p></div>
+    <div *ngIf="newCall.accountName && !loadingCustomerHistory && selectedCustomerHistory.length" class="history-timeline"><div *ngFor="let h of selectedCustomerHistory" class="history-card"><div class="history-card-header"><span class="status-badge" [class.completed]="h.status===1" [class.scheduled]="h.status===0">{{h.status===1 ? 'Completed' : 'Scheduled'}}</span><span class="history-date">{{(h.callDate || h.createdDate) | date:'M/d/yyyy'}}</span></div><div class="history-meta"><span *ngIf="h.contactName"><b>Contact:</b> {{h.contactName}}</span><span *ngIf="h.contactPhone || h.phone"><b>Phone:</b> {{h.contactPhone || h.phone}}</span><span><b>Rep:</b> {{getRepDisplayName(h.repName, h.salesRepEmail || h.repEmail)}}</span><span *ngIf="h.followUpDate"><b>Follow-up:</b> {{h.followUpDate | date:'M/d/yyyy'}}</span></div><p *ngIf="h.comments" class="history-comments">{{h.comments}}</p></div></div>
+  </div>
+</div>

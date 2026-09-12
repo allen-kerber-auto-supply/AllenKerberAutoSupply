@@ -1,0 +1,19 @@
+<div class="modal-backdrop">
+  <div class="card modal email-modal">
+    <p class="eyebrow">Email Invoices</p><h2>Send Selected Invoices</h2>
+    <section *ngIf="!groups.length" class="muted-note">No invoices selected.</section>
+    <section *ngFor="let group of groups" class="email-group">
+      <h3>{{group.customerName}} <small *ngIf="group.customerNumber">#{{group.customerNumber}}</small></h3>
+      <p class="muted-note">Invoices: {{groupLabel(group)}}</p>
+      <div *ngIf="group.loadingEmails" class="muted-note">Loading email addresses...</div>
+      <div *ngIf="!group.loadingEmails && group.availableEmails.length" class="email-checklist">
+        <label *ngFor="let email of group.availableEmails" class="check"><input type="checkbox" [checked]="isSelected(group, email)" (change)="emailToggled.emit({group, email, checked: $any($event.target).checked})"> {{email}}</label>
+      </div>
+      <p *ngIf="!group.loadingEmails && !group.availableEmails.length" class="muted-note">No email addresses on file for this customer.</p>
+      <label>Additional email address<input type="email" [(ngModel)]="group.adHocEmail" placeholder="name@example.com"></label>
+    </section>
+    <section *ngIf="error" class="alert">{{error}}</section>
+    <section *ngIf="results" class="email-results"><p><strong>Results:</strong></p><p *ngFor="let result of results" [class.alert]="!result.success">{{result.email}} &mdash; {{result.success ? 'Sent' : ('Failed: ' + result.error)}}</p></section>
+    <div><button class="button secondary" type="button" (click)="closed.emit()">Close</button><button class="button primary" type="button" [disabled]="sending || !canSend" (click)="sendRequested.emit()">{{sending ? 'Sending...' : 'Send emails'}}</button></div>
+  </div>
+</div>

@@ -1,0 +1,31 @@
+<div class="heading">
+  <div>
+    <p class="eyebrow">Sales</p>
+    <h1>Sales Calls</h1>
+    <p>Manage sales calls with existing and prospective customers.</p>
+  </div>
+  <div class="sales-actions-top">
+    <label *ngIf="isAdmin && reps.length" class="rep-filter-label">
+      <span>Sales Rep:</span>
+      <select [ngModel]="selectedRep" (ngModelChange)="updateRep($event)">
+        <option value="">All Sales Reps</option>
+        <option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="sales-tabs">
+  <button type="button" [class.active]="activeTab === 'scheduled'" (click)="selectTab('scheduled')">
+    <i>📅</i> Scheduled Calls <span class="badge" *ngIf="scheduledCount">{{scheduledCount}}</span>
+  </button>
+  <button type="button" [class.active]="activeTab === 'new-call'" (click)="selectTab('new-call')">
+    <i>✍️</i> Log Call
+  </button>
+  <button type="button" [class.active]="activeTab === 'history'" (click)="selectTab('history')">
+    <i>📜</i> Call History
+  </button>
+  <button type="button" *ngIf="isAdmin" [class.active]="activeTab === 'admin'" (click)="selectTab('admin')">
+    <i>⚙️</i> Reps &amp; Accounts
+  </button>
+</div>

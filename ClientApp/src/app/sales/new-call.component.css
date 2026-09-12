@@ -1,0 +1,9 @@
+:host { display: block; }
+
+.new-call-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 1rem; }
+
+.form-card, .history-sidebar { min-width: 0; }
+
+@media (max-width: 980px) {
+  .new-call-layout { grid-template-columns: 1fr; }
+}

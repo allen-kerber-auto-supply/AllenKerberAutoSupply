@@ -1,0 +1,38 @@
+<div *ngIf="call" class="modal-backdrop" role="presentation">
+  <div class="card call-detail-modal" role="dialog" aria-modal="true" aria-labelledby="call-detail-title">
+    <div class="call-detail-header">
+      <div>
+        <p class="eyebrow">Call Details</p>
+        <h2 id="call-detail-title">{{call.accountName}}</h2>
+      </div>
+      <button class="button secondary" type="button" (click)="closed.emit()">Close</button>
+    </div>
+
+    <div class="call-detail-grid">
+      <div class="call-detail-item">
+        <span class="call-detail-label">Status</span>
+        <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">{{call.status===1 ? 'Completed' : 'Scheduled'}}</span>
+        <span *ngIf="isProspect" class="status-badge prospect">Prospect</span>
+      </div>
+      <div class="call-detail-item"><span class="call-detail-label">Customer</span><span class="call-detail-value">{{call.accountName || '—'}}</span></div>
+      <div class="call-detail-item"><span class="call-detail-label">Contact</span><span class="call-detail-value">{{call.contactName || '—'}}</span></div>
+      <div class="call-detail-item">
+        <span class="call-detail-label">Phone</span>
+        <span class="call-detail-value">
+          <a *ngIf="call.contactPhone || call.phone" [href]="'tel:' + (call.contactPhone || call.phone)" class="phone-link">{{call.contactPhone || call.phone}}</a>
+          <span *ngIf="!call.contactPhone && !call.phone">—</span>
+        </span>
+      </div>
+      <div class="call-detail-item"><span class="call-detail-label">Call Date</span><span class="call-detail-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div>
+      <div class="call-detail-item"><span class="call-detail-label">Follow-up</span><span class="call-detail-value">{{call.followUpDate ? (call.followUpDate | date:'M/d/yyyy') : '—'}}</span></div>
+      <div class="call-detail-item full-width"><span class="call-detail-label">Rep</span><span class="call-detail-value">{{call.repName || call.salesRepEmail || call.repEmail || '—'}}</span></div>
+      <div class="call-detail-item full-width"><span class="call-detail-label">Comments</span><span class="call-detail-value">{{call.comments || '—'}}</span></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="button secondary" type="button" (click)="closed.emit()">Close</button>
+      <button *ngIf="isProspect" class="button secondary" type="button" (click)="convertRequested.emit()" [disabled]="converting">{{converting ? 'Adding...' : 'Add as Customer'}}</button>
+      <button class="button primary" type="button" (click)="editRequested.emit(call)">Edit</button>
+    </div>
+  </div>
+</div>

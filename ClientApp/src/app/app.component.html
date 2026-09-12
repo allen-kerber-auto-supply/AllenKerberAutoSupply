@@ -1,0 +1,178 @@
+  <app-invoice-viewer
+    *ngIf="isViewer"
+    [invoiceNumber]="viewerInvoiceNumber"
+    [storeNumber]="viewerStoreNumber"
+    [customer]="viewerCustomer"
+    [customerNumber]="viewerCustNo"
+    [theme]="theme"
+    (emailRequested)="openEmailModalForInvoices([$event])">
+  </app-invoice-viewer>
+
+  <!-- MAIN APPLICATION LAYOUT -->
+  <main *ngIf="!isViewer" [class.dark-theme]="theme === 'dark'" [class.invoice-mode]="destination === 'invoice'">
+    <div *ngIf="callSuccessMessage" class="call-success-toast" role="status" aria-live="polite">{{callSuccessMessage}}</div>
+    <header><a class="brand" href="/"><img src="/ak-logo.jpg" alt="Allen &amp; Kerber Auto Supply" class="brand-logo"><b>Allen & Kerber<small>Auto Supply</small></b></a><div class="actions">
+      <button class="theme" type="button" (click)="toggleTheme()">{{theme === 'dark' ? 'Light' : 'Dark'}} theme</button>
+      <div *ngIf="authenticated" class="menu"><button type="button" (click)="menuOpen=!menuOpen"><i>{{initials}}</i><span>{{name || 'Account'}}</span> &#9662;</button><div *ngIf="menuOpen" class="menu-items">
+        <button *ngIf="canManageUsers" type="button" (click)="go('admin')">User administration</button><button *ngIf="hasDualRoles" type="button" (click)="switchView()">Switch to {{destination === 'sales' ? 'Invoices' : 'Sales'}}</button><button type="button" (click)="logout()" [disabled]="signingOut">{{signingOut ? 'Signing out...' : 'Sign out'}}</button>
+      </div></div>
+    </div></header>
+
+    <app-access-denied *ngIf="denied"></app-access-denied>
+
+    <app-login *ngIf="!authenticated && !denied"></app-login>
+
+    <app-password-change *ngIf="authenticated && destination==='password-change'"></app-password-change>
+
+    <app-workspace-chooser *ngIf="authenticated && destination==='choose'" (workspaceSelected)="go($event)"></app-workspace-chooser>
+
+    <section *ngIf="authenticated && destination==='sales'" class="workspace sales-workspace">
+      <app-sales-navigation
+        [isAdmin]="isSalesAdmin"
+        [reps]="salesReps"
+        [scheduledCount]="scheduledCalls.length"
+        [activeTab]="salesTab"
+        [selectedRep]="selectedSalesFilterRep"
+        (tabChange)="setSalesTab($event)"
+        (selectedRepChange)="selectedSalesFilterRep = $event"
+        (repFilterChange)="onFilterRepChange()"></app-sales-navigation>
+
+      <app-scheduled-calls
+        *ngIf="salesTab==='scheduled'"
+        [calls]="scheduledCalls"
+        [loading]="loadingScheduledCalls"
+        [isAdmin]="isSalesAdmin"
+        (newCallRequested)="setSalesTab('new-call')"
+        (callSelected)="openCallDetails($event)"
+        (completeRequested)="openCompleteModal($event)"
+        (deleteRequested)="deleteCall($event)"></app-scheduled-calls>
+
+      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdmin" [currentUserEmail]="currentUserEmail" (saved)="loadScheduledCalls()"></app-new-call>
+
+      <app-sales-history
+        *ngIf="salesTab==='history'"
+        [isAdmin]="isSalesAdmin"
+        [viewMode]="historyViewMode"
+        [loading]="loadingHistory"
+        [dateFrom]="historyDateFrom"
+        [dateTo]="historyDateTo"
+        [accountFilter]="historyAccountFilter"
+        [accountOptions]="callHistoryAccountOptions"
+        [selectedRep]="selectedSalesFilterRep"
+        [reps]="salesReps"
+        [calls]="filteredCallHistory"
+        [summaries]="filteredAccountSummaries"
+        [selectedSummaryAccount]="selectedSummaryAccount"
+        [selectedSummaryCalls]="selectedAccountSummaryCalls"
+        [isProspect]="isCallProspect.bind(this)"
+        [repDisplayName]="getRepDisplayName.bind(this)"
+        (viewModeChange)="historyViewMode = $event"
+        (filtersChanged)="loadCallHistory()"
+        (accountFilterChange)="historyAccountFilter = $event"
+        (selectedRepChange)="selectedSalesFilterRep = $event"
+        (exportRequested)="exportHistoryCsv()"
+        (printRequested)="printAccountList()"
+        (callSelected)="openCallDetails($event)"
+        (editRequested)="openEditCall($event)"
+        (deleteRequested)="deleteCall($event)"
+        (summarySelected)="selectAccountSummary($event)"
+        (summaryClosed)="clearSelectedSummaryAccount()"></app-sales-history>
+
+      <app-sales-admin
+        *ngIf="salesTab==='admin' && isSalesAdmin"
+        [reps]="salesReps"
+        [unassignedCustomers]="unassignedCustomerOptions"
+        [customers]="filteredSalesCustomers"
+        [accountFilter]="adminAccountFilter"
+        [repFilter]="adminRepFilter"
+        [assignmentMessage]="accountAssignmentMessage"
+        [newRep]="newSalesRep"
+        [newCustomerName]="newCustomerName"
+        [selectedRepEmail]="selectedAssignRepEmail"
+        [accountName]="getAccountName.bind(this)"
+        [assignedReps]="formatAssignedReps.bind(this)"
+        [hasAssignments]="hasAssignedSalesReps.bind(this)"
+        (newRepChange)="newSalesRep = $event"
+        (newCustomerNameChange)="newCustomerName = $event"
+        (selectedRepEmailChange)="selectedAssignRepEmail = $event"
+        (accountFilterChange)="adminAccountFilter = $event"
+        (repFilterChange)="adminRepFilter = $event"
+        (filtersChanged)="applyAdminAccountFilter()"
+        (addRepRequested)="addSalesRep()"
+        (deleteRepRequested)="deleteSalesRep($event)"
+        (assignCustomerRequested)="addSalesCustomer()"
+        (deleteCustomerRequested)="deleteSalesCustomer($event)"></app-sales-admin>
+
+    </section>
+
+    <app-call-edit-modals
+      [completingCall]="completingCall"
+      [completingComments]="completingComments"
+      [completingFollowUpDate]="completingFollowUpDate"
+      [editingCall]="editingCall"
+      (completingCommentsChange)="completingComments = $event"
+      (completingFollowUpDateChange)="completingFollowUpDate = $event"
+      (editingCallChange)="editingCall = $event"
+      (completeRequested)="saveCompleteCall()"
+      (editRequested)="saveEditCall()"
+      (closed)="completingCall = null; editingCall = null"></app-call-edit-modals>
+
+    <app-call-details
+      [call]="selectedCallDetails"
+      [isProspect]="selectedCallDetails ? isCallProspect(selectedCallDetails) : false"
+      [converting]="convertingProspect"
+      (closed)="closeCallDetails()"
+      (convertRequested)="convertProspectToCustomer()"
+      (editRequested)="openEditCall($event); closeCallDetails()"></app-call-details>
+
+    <app-invoice-search *ngIf="authenticated && destination==='invoice'" [customers]="allCustomers" (uploadRequested)="go('invoice-upload')" (emailRequested)="openEmailModalForInvoices($event)" (invoiceSelected)="viewInvoice($event)"></app-invoice-search>
+
+    <app-invoice-upload *ngIf="authenticated && destination==='invoice-upload'" (backRequested)="go('invoice')"></app-invoice-upload>
+    <app-user-admin
+      *ngIf="authenticated && destination==='admin'"
+      [users]="users"
+      [loadingUsers]="loadingUsers"
+      [usersError]="usersError"
+      [newUser]="newUser"
+      [roleOptions]="roleOptions"
+      [adminMessage]="adminMessage"
+      [adminError]="adminError"
+      [resettingUser]="resettingUser"
+      [resetPasswordValue]="resetPasswordValue"
+      [editingRolesUser]="editingRolesUser"
+      [editingRoles]="editingRoles"
+      [deletingUser]="deletingUser"
+      [isSelf]="isSelf.bind(this)"
+      [hasRole]="hasRole.bind(this)"
+      [hasEditingRole]="hasEditingRole.bind(this)"
+      (backRequested)="go(previousWorkspace)"
+      (createRequested)="createUser()"
+      (retryRequested)="loadUsers()"
+      (roleToggled)="toggleRole($event.role, $event.selected)"
+      (generateNewUserPassword)="newUser.temporaryPassword = generateTempPassword()"
+      (generateResetPassword)="resetPasswordValue = generateTempPassword()"
+      (resetStarted)="startReset($event)"
+      (editRolesStarted)="startEditRoles($event)"
+      (deleteStarted)="startDelete($event)"
+      (resetRequested)="resetPassword()"
+      (rolesSaveRequested)="saveRoles()"
+      (deleteRequested)="deleteUser()"
+      (resetClosed)="resettingUser=null"
+      (rolesClosed)="editingRolesUser=null"
+      (deleteClosed)="deletingUser=null"
+      (editingRoleToggled)="toggleEditingRole($event.role, $event.selected)"></app-user-admin>
+
+  </main>
+
+  <app-invoice-email-modal
+    *ngIf="emailModalOpen"
+    [groups]="emailGroups"
+    [error]="emailError"
+    [results]="emailResults"
+    [sending]="sendingEmails"
+    [isSelected]="isGroupEmailSelected.bind(this)"
+    [groupLabel]="groupInvoiceLabel.bind(this)"
+    [canSend]="hasSelectableEmails()"
+    (closed)="closeEmailModal()"
+    (emailToggled)="toggleGroupEmail($event.group, $event.email, $event.checked)"
+    (sendRequested)="sendSelectedInvoiceEmails()"></app-invoice-email-modal>

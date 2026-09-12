@@ -1,0 +1,53 @@
+<div class="viewer-layout" [class.dark-theme]="theme === 'dark'">
+  <header class="viewer-toolbar">
+    <div class="viewer-toolbar-info">
+      <h1 class="viewer-toolbar-title">Invoice #{{invoiceNumber}}</h1>
+      <p class="viewer-toolbar-meta">
+        <span *ngIf="customer">{{customer}}</span>
+        <span *ngIf="customerNumber"> (#{{customerNumber}})</span>
+        <span *ngIf="customer || customerNumber"> &bull; </span>
+        <span>{{pages.length}} page{{pages.length === 1 ? '' : 's'}}</span>
+      </p>
+    </div>
+    <div class="viewer-toolbar-actions">
+      <button class="button primary email-btn" type="button" (click)="requestEmail()">Email</button>
+      <button class="button primary print-btn" type="button" (click)="print()">Print (Ctrl+P)</button>
+      <button class="button secondary" type="button" (click)="close()">Close</button>
+    </div>
+  </header>
+
+  <div *ngIf="loading" class="viewer-loading">
+    <div class="spinner"></div>
+    <p class="viewer-loading-title">Loading Invoice #{{invoiceNumber}}...</p>
+    <p class="viewer-loading-note">Retrieving invoice images...</p>
+  </div>
+
+  <div *ngIf="!loading && error" class="viewer-error">
+    <div class="card viewer-error-card">
+      <p class="eyebrow viewer-error-label">Error</p>
+      <h2>Unable to load invoice</h2>
+      <p class="viewer-error-message">{{error}}</p>
+      <button class="button primary" type="button" (click)="load()">Retry</button>
+    </div>
+  </div>
+
+  <main *ngIf="!loading && !error" class="viewer-container">
+    <div *ngFor="let page of pages" class="viewer-card">
+      <div class="viewer-page-header">
+        <span>Invoice #{{invoiceNumber}} <ng-container *ngIf="customer">&bull; {{customer}}</ng-container></span>
+        <span>Page {{page.pageIndex}} of {{pages.length}}</span>
+      </div>
+      <div class="viewer-page-body">
+        <div *ngIf="page.loading" class="page-spinner-wrap">
+          <div class="spinner small"></div>
+          <p class="viewer-page-loading">Loading page {{page.pageIndex}}...</p>
+        </div>
+        <img *ngIf="page.blobUrl && !page.error" class="viewer-page-img" [src]="page.blobUrl" [alt]="'Invoice ' + invoiceNumber + ' Page ' + page.pageIndex" />
+        <div *ngIf="page.error" class="error-box">
+          <p class="viewer-page-error">{{page.errorMessage || 'No image available for page ' + page.pageIndex + '.'}}</p>
+          <button class="button secondary" type="button" (click)="retryPage(page)">Retry</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>

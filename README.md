@@ -40,6 +40,21 @@ The Google libraries automatically discover ADC. For a non-user local
 credential, set `GOOGLE_APPLICATION_CREDENTIALS` to a credential file path
 without committing that file.
 
+## Frontend structure
+
+The Angular application is organized under `ClientApp/src/app` by feature:
+
+- `auth`: login, password changes, and access-denied views
+- `invoices`: search, upload, viewer, image, and email workflows
+- `sales`: navigation, new calls, scheduled calls, history, administration, and call modals
+- `workspace`: workspace selection
+- `shared`: models and theme services
+
+The root shell is defined by `main.ts`, `app.component.html`, and
+`app.component.css`. Feature components own their presentation and focused
+transport services, while the root shell coordinates authentication, workspace
+selection, and cross-feature navigation.
+
 ## User provisioning and authorization
 
 Both Google and email/password sign-in require a matching document in the
