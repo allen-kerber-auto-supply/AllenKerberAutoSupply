@@ -22,16 +22,16 @@
               <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null">
               <small *ngIf="callTimeError" id="call-time-error" class="field-error">{{callTimeError}}</small>
             </label>
-            <fieldset class="duration-fieldset">
+            <fieldset class="duration-fieldset" [class.invalid-fieldset]="durationTotalError" [attr.aria-describedby]="durationTotalError ? 'duration-total-error' : null">
               <legend>Call Duration *</legend>
               <div class="time-parts">
                 <label class="time-part-field">Hours
-                  <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationTotalError ? (durationHoursError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationHoursError || durationTotalError ? 'true' : null">
+                  <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError" [attr.aria-describedby]="durationHoursError ? 'duration-hours-error' : null" [attr.aria-invalid]="durationHoursError ? 'true' : null">
                   <small *ngIf="durationHoursError" id="duration-hours-error" class="field-error">{{durationHoursError}}</small>
                 </label>
                 <span aria-hidden="true">:</span>
                 <label class="time-part-field">Minutes
-                  <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required [class.invalid-input]="durationMinutesError || durationTotalError" [attr.aria-describedby]="(durationMinutesError ? 'duration-minutes-error' : '') + (durationTotalError ? (durationMinutesError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationMinutesError || durationTotalError ? 'true' : null">
+                  <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required [class.invalid-input]="durationMinutesError" [attr.aria-describedby]="durationMinutesError ? 'duration-minutes-error' : null" [attr.aria-invalid]="durationMinutesError ? 'true' : null">
                   <small *ngIf="durationMinutesError" id="duration-minutes-error" class="field-error">{{durationMinutesError}}</small>
                 </label>
               </div>

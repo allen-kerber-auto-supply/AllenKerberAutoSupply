@@ -28,6 +28,12 @@
   font-weight: 700;
 }
 
+.invalid-fieldset {
+  outline: 2px solid rgba(220, 77, 77, 0.25);
+  outline-offset: 0.35rem;
+  border-radius: 8px;
+}
+
 .time-parts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

@@ -4,10 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { SalesCall, SalesCustomer, SalesRep } from '../shared/models';
 import { SalesService } from './sales.service';
 
-function today(): string { return new Date().toISOString().slice(0, 10); }
 function padTime(value: number): string { return value.toString().padStart(2, '0'); }
-function currentTimePart(getValue: (date: Date) => number): number { return getValue(new Date()); }
-function currentTimeValue(): string { return `${padTime(currentTimePart(date => date.getHours()))}:${padTime(currentTimePart(date => date.getMinutes()))}`; }
+function localDateValue(date: Date): string { return `${date.getFullYear()}-${padTime(date.getMonth() + 1)}-${padTime(date.getDate())}`; }
+function currentTimeValue(date: Date): string { return `${padTime(date.getHours())}:${padTime(date.getMinutes())}`; }
 
 @Component({
   selector: 'app-new-call',
@@ -29,7 +28,7 @@ export class NewCallComponent implements OnChanges {
   loadingCustomerHistory = false;
   savingCall = false;
   callErrorMessage = '';
-  callTime = currentTimeValue();
+  callTime = currentTimeValue(new Date());
   durationHours = 0;
   durationMinutes = 0;
 
@@ -101,8 +100,9 @@ export class NewCallComponent implements OnChanges {
   }
 
   resetNewCallForm(): void {
-    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
-    this.callTime = currentTimeValue();
+    const now = new Date();
+    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: localDateValue(now), followUpDate: '' };
+    this.callTime = currentTimeValue(now);
     this.durationHours = 0;
     this.durationMinutes = 0;
     this.setDefaultRep();
@@ -159,7 +159,7 @@ export class NewCallComponent implements OnChanges {
   }
 
   private emptyCall(): SalesCall {
-    return { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    return { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: localDateValue(new Date()), followUpDate: '' };
   }
 
   private validateCallTiming(): string {
