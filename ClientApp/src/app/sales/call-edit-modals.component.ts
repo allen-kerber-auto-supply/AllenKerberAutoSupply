@@ -62,7 +62,7 @@ export class CallEditModalsComponent implements OnChanges {
   private initializeEditTimingState(): void {
     if (!this.editingCall) return;
     const parsedCallDateTime = this.parseCallDateTime(this.editingCall.callDate);
-    this.editCallDate = parsedCallDateTime?.date || new Date().toISOString().slice(0, 10);
+    this.editCallDate = parsedCallDateTime?.date || this.toDateInputValue(new Date());
     this.editCallTime = parsedCallDateTime?.time || '00:00';
     this.callDateTimeSuffix = parsedCallDateTime?.suffix || '';
 
@@ -114,5 +114,12 @@ export class CallEditModalsComponent implements OnChanges {
 
   private parseCallTime(value: string): string | null {
     return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value || '') ? value : null;
+  }
+
+  private toDateInputValue(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

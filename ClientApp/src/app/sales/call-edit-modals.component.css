@@ -29,10 +29,10 @@
   color: var(--text);
 }
 
-.modal input,
-.modal textarea,
-.modal select,
-.modal fieldset {
+:host-context(.dark-theme) .modal input,
+:host-context(.dark-theme) .modal textarea,
+:host-context(.dark-theme) .modal select,
+:host-context(.dark-theme) .modal fieldset {
   border-color: var(--line);
   background: var(--soft);
   color: var(--text);
