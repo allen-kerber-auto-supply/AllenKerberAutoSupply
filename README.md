@@ -47,6 +47,8 @@ The Angular application is organized under `ClientApp/src/app` by feature:
 - `auth`: login, password changes, and access-denied views
 - `invoices`: search, upload, viewer, image, and email workflows
 - `sales`: navigation, new calls, scheduled calls, history, administration, and call modals
+- `admin`: user administration
+- `shell`: application header and root shell pieces
 - `workspace`: workspace selection
 - `shared`: models and theme services
 

@@ -1,3 +1,18 @@
 :host {
   display: contents;
 }
+
+.modal-backdrop {
+  color: var(--text);
+}
+
+:host-context(.dark-theme) .modal-backdrop {
+  --bg: #0b1120;
+  --surface: #131c30;
+  --soft: #19243a;
+  --text: #eff4ff;
+  --muted: #aab7cd;
+  --line: #2b3954;
+  --blue: #7da9ff;
+  --shadow: 0 20px 50px #0007;
+}

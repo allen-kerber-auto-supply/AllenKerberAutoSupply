@@ -11,12 +11,19 @@
   <!-- MAIN APPLICATION LAYOUT -->
   <main *ngIf="!isViewer" [class.dark-theme]="theme === 'dark'" [class.invoice-mode]="destination === 'invoice'">
     <div *ngIf="callSuccessMessage" class="call-success-toast" role="status" aria-live="polite">{{callSuccessMessage}}</div>
-    <header><a class="brand" href="/"><img src="/ak-logo.jpg" alt="Allen &amp; Kerber Auto Supply" class="brand-logo"><b>Allen & Kerber<small>Auto Supply</small></b></a><div class="actions">
-      <button class="theme" type="button" (click)="toggleTheme()">{{theme === 'dark' ? 'Light' : 'Dark'}} theme</button>
-      <div *ngIf="authenticated" class="menu"><button type="button" (click)="menuOpen=!menuOpen"><i>{{initials}}</i><span>{{name || 'Account'}}</span> &#9662;</button><div *ngIf="menuOpen" class="menu-items">
-        <button *ngIf="canManageUsers" type="button" (click)="go('admin')">User administration</button><button *ngIf="hasDualRoles" type="button" (click)="switchView()">Switch to {{destination === 'sales' ? 'Invoices' : 'Sales'}}</button><button type="button" (click)="logout()" [disabled]="signingOut">{{signingOut ? 'Signing out...' : 'Sign out'}}</button>
-      </div></div>
-    </div></header>
+    <app-header
+      [theme]="theme"
+      [authenticated]="authenticated"
+      [canManageUsers]="canManageUsers"
+      [hasDualRoles]="hasDualRoles"
+      [destination]="destination"
+      [name]="name"
+      [initials]="initials"
+      [signingOut]="signingOut"
+      (themeToggle)="toggleTheme()"
+      (adminRequested)="go('admin')"
+      (switchRequested)="switchView()"
+      (logoutRequested)="logout()"></app-header>
 
     <app-access-denied *ngIf="denied"></app-access-denied>
 
