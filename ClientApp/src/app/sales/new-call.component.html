@@ -18,12 +18,12 @@
         <div class="call-date-panel">
           <label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
           <div class="form-grid-2 call-timing-grid">
-            <label>Call Time
+            <label>Call Time *
               <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null">
               <small *ngIf="callTimeError" id="call-time-error" class="field-error">{{callTimeError}}</small>
             </label>
             <fieldset class="duration-fieldset">
-              <legend>Call Duration</legend>
+              <legend>Call Duration *</legend>
               <div class="time-parts">
                 <label class="time-part-field">Hours
                   <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationTotalError ? (durationHoursError ? ' duration-total-error' : 'duration-total-error') : '') || null" [attr.aria-invalid]="durationHoursError || durationTotalError ? 'true' : null">
