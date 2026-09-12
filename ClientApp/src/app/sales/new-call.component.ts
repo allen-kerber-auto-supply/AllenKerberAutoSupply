@@ -69,6 +69,14 @@ export class NewCallComponent implements OnChanges {
     return this.validateDurationLimit();
   }
 
+  get durationHoursDescribedBy(): string | null {
+    return this.describeDurationField('duration-hours-error', this.durationHoursValidationMessage);
+  }
+
+  get durationMinutesDescribedBy(): string | null {
+    return this.describeDurationField('duration-minutes-error', this.durationMinutesValidationMessage);
+  }
+
   isAssignedSalesCustomer(accountName: string): boolean {
     return this.assignedRepEmails(this.findCustomer(accountName)).length > 0;
   }
@@ -205,6 +213,14 @@ export class NewCallComponent implements OnChanges {
     return this.isWholeNumberInRange(hours, 0, 23) && this.isWholeNumberInRange(minutes, 0, 59)
       ? { hours, minutes }
       : null;
+  }
+
+  private describeDurationField(fieldErrorId: string, fieldMessage: string): string | null {
+    const ids = [
+      fieldMessage ? fieldErrorId : '',
+      this.durationLimitValidationMessage ? 'duration-limit-error' : ''
+    ].filter(Boolean);
+    return ids.length ? ids.join(' ') : null;
   }
 
   private setDefaultRep(): void {
