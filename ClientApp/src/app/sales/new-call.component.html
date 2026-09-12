@@ -17,7 +17,8 @@
       <div class="form-grid-2 call-timing-grid">
         <label class="call-date-field">Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
         <label class="call-time-field">Call Time *
-          <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" [attr.aria-describedby]="callTimeValidationMessage ? 'call-time-error' : null" [attr.aria-invalid]="callTimeValidationMessage ? 'true' : null">
+          <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" [attr.aria-describedby]="callTimeDescribedBy" [attr.aria-invalid]="callTimeValidationMessage ? 'true' : null">
+          <small id="call-time-hint" class="input-hint">Use the time picker to select the call time.</small>
           <small *ngIf="callTimeValidationMessage" id="call-time-error" class="input-error">{{callTimeValidationMessage}}</small>
         </label>
         <fieldset class="call-duration-field">

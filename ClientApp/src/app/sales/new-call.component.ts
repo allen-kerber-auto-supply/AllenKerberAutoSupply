@@ -57,6 +57,10 @@ export class NewCallComponent implements OnChanges {
     return this.validateCallTime();
   }
 
+  get callTimeDescribedBy(): string {
+    return this.callTimeValidationMessage ? 'call-time-hint call-time-error' : 'call-time-hint';
+  }
+
   get durationHoursValidationMessage(): string {
     return this.validateDurationHours();
   }

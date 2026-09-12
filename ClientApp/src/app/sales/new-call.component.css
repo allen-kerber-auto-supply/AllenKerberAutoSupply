@@ -6,9 +6,9 @@
 
 .call-timing-grid {
   grid-template-areas:
-    "date rep"
-    "time rep"
-    "duration rep";
+    "date date"
+    "time duration"
+    "rep rep";
 }
 
 .call-date-field { grid-area: date; }
