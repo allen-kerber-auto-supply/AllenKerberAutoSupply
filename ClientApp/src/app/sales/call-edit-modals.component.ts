@@ -84,9 +84,11 @@ export class CallEditModalsComponent implements OnChanges {
 
   private updateDuration(hours: number, minutes: number): void {
     if (!this.editingCall) return;
-    const normalizedHours = Math.max(0, hours);
-    const normalizedMinutes = Math.max(0, minutes);
-    const totalMinutes = Math.min(480, normalizedHours * 60 + normalizedMinutes);
+    const normalizedHours = Math.min(8, Math.max(0, hours));
+    const normalizedMinutes = Math.min(59, Math.max(0, minutes));
+    const totalMinutes = normalizedHours === 8 && normalizedMinutes > 0
+      ? 480
+      : normalizedHours * 60 + normalizedMinutes;
     this.durationHours = Math.floor(totalMinutes / 60);
     this.durationMinutes = totalMinutes % 60;
     this.editingCallChange.emit({
