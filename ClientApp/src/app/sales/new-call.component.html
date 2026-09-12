@@ -30,7 +30,7 @@
             <span>:</span>
             <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required>
           </div>
-          <small class="input-hint">Duration hours are limited to 8.</small>
+          <small class="input-hint">Duration cannot exceed 8:00.</small>
         </label>
       </div>
       <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>

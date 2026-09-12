@@ -10,7 +10,7 @@ namespace AllenKerberAutoSupply.Controllers;
 [Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.SalesAdmin},{RoleNames.SalesUser}")]
 public sealed class SalesController(ISalesRepository repository) : ControllerBase
 {
-    private const int MaxCallDurationMinutes = (8 * 60) + 59;
+    private const int MaxCallDurationMinutes = 8 * 60;
 
     private string GetEffectiveRepEmail(string? requestedRepEmail)
     {
@@ -158,7 +158,7 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
         call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
         if (call.CallDuration < 0 || call.CallDuration > MaxCallDurationMinutes)
         {
-            return BadRequest(new { message = "Call duration must use 0 to 8 hours and 0 to 59 minutes." });
+            return BadRequest(new { message = "Call duration must be between 0 and 480 minutes." });
         }
 
         if (string.IsNullOrWhiteSpace(call.SalesRepEmail))
@@ -201,7 +201,7 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
         call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
         if (call.CallDuration < 0 || call.CallDuration > MaxCallDurationMinutes)
         {
-            return BadRequest(new { message = "Call duration must use 0 to 8 hours and 0 to 59 minutes." });
+            return BadRequest(new { message = "Call duration must be between 0 and 480 minutes." });
         }
 
         if (string.IsNullOrWhiteSpace(call.SalesRepEmail))

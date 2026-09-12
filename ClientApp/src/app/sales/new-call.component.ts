@@ -154,6 +154,10 @@ export class NewCallComponent implements OnChanges {
       return 'Call duration minutes must be between 0 and 59.';
     }
 
+    if (this.durationHours === 8 && this.durationMinutes > 0) {
+      return 'Call duration cannot exceed 8 hours.';
+    }
+
     return '';
   }
 
