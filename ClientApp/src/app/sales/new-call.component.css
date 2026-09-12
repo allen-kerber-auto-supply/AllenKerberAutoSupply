@@ -19,6 +19,21 @@
 
 .sales-rep-field { grid-area: rep; align-self: start; }
 
+.call-duration-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.call-duration-field legend {
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .time-parts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

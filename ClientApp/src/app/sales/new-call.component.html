@@ -17,10 +17,11 @@
       <div class="form-grid-2 call-timing-grid">
         <label class="call-date-field">Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
         <label class="call-time-field">Call Time *
-          <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" aria-label="Call time" [attr.aria-describedby]="callTimeValidationMessage ? 'call-time-error' : null" [attr.aria-invalid]="callTimeValidationMessage ? 'true' : null">
+          <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" [attr.aria-describedby]="callTimeValidationMessage ? 'call-time-error' : null" [attr.aria-invalid]="callTimeValidationMessage ? 'true' : null">
           <small *ngIf="callTimeValidationMessage" id="call-time-error" class="input-error">{{callTimeValidationMessage}}</small>
         </label>
-        <label class="call-duration-field">Call Duration
+        <fieldset class="call-duration-field">
+          <legend>Call Duration</legend>
           <div class="time-parts">
             <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required aria-label="Call duration hours" [attr.aria-describedby]="durationHoursDescribedBy" [attr.aria-invalid]="durationHoursValidationMessage || durationLimitValidationMessage ? 'true' : null">
             <span>:</span>
@@ -30,7 +31,7 @@
           <small *ngIf="durationMinutesValidationMessage" id="duration-minutes-error" class="input-error">{{durationMinutesValidationMessage}}</small>
           <small *ngIf="durationLimitValidationMessage" id="duration-limit-error" class="input-error">{{durationLimitValidationMessage}}</small>
           <small class="input-hint">Duration cannot exceed 8:00.</small>
-        </label>
+        </fieldset>
         <label class="sales-rep-field">Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label>
       </div>
       <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>
