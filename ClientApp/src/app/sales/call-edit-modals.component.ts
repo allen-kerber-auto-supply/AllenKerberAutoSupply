@@ -104,7 +104,7 @@ export class CallEditModalsComponent implements OnChanges {
   }
 
   private parseCallDateTime(value?: string): { date: string; time: string; suffix: string } | null {
-    const match = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?([Zz]|[+-]\d{2}(?::?\d{2}){1,2})?)?/.exec(value || '');
+    const match = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?([Zz]|[+-]\d{2}(?::?\d{2}){0,2})?$/.exec(value || '');
     if (!match) return null;
     const date = match[1];
     const time = match[2] && match[3] ? `${match[2]}:${match[3]}` : '00:00';
