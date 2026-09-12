@@ -73,6 +73,10 @@ export class AppComponent implements OnInit {
   loadingHistory = false;
   callSuccessMessage = '';
   private callSuccessToastTimer: number | null = null;
+
+  get isSalesAdminView(): boolean {
+    return this.isSalesAdmin && !this.selectedSalesFilterRep;
+  }
   completingCall: SalesCall | null = null;
   completingComments = '';
   completingFollowUpDate = '';
@@ -399,6 +403,13 @@ export class AppComponent implements OnInit {
       this.loadScheduledCalls();
     } else if (this.salesTab === 'history') {
       this.loadCallHistory();
+    }
+  }
+
+  onSalesFilterRepChange(value: string) {
+    this.selectedSalesFilterRep = value;
+    if (value && this.salesTab === 'admin') {
+      this.salesTab = 'scheduled';
     }
   }
 

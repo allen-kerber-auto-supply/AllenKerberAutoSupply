@@ -14,6 +14,7 @@ export type SalesTab = 'scheduled' | 'new-call' | 'history' | 'admin';
 })
 export class SalesNavigationComponent {
   @Input() isAdmin = false;
+  @Input() canViewAdminTab = false;
   @Input() reps: SalesRep[] = [];
   @Input() scheduledCount = 0;
   @Input() activeTab: SalesTab = 'scheduled';

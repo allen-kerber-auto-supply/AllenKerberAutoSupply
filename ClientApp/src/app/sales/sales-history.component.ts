@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AccountSummary, SalesCall, SalesRep } from '../shared/models';
+import { AccountSummary, SalesCall } from '../shared/models';
 
 export type HistoryViewMode = 'records' | 'summary';
 
@@ -20,8 +20,6 @@ export class SalesHistoryComponent {
   @Input() dateTo = '';
   @Input() accountFilter = '';
   @Input() accountOptions: string[] = [];
-  @Input() selectedRep = '';
-  @Input() reps: SalesRep[] = [];
   @Input() calls: SalesCall[] = [];
   @Input() summaries: AccountSummary[] = [];
   @Input() selectedSummaryAccount = '';
@@ -32,7 +30,6 @@ export class SalesHistoryComponent {
   @Output() viewModeChange = new EventEmitter<HistoryViewMode>();
   @Output() filtersChanged = new EventEmitter<void>();
   @Output() accountFilterChange = new EventEmitter<string>();
-  @Output() selectedRepChange = new EventEmitter<string>();
   @Output() exportRequested = new EventEmitter<void>();
   @Output() printRequested = new EventEmitter<void>();
   @Output() callSelected = new EventEmitter<SalesCall>();

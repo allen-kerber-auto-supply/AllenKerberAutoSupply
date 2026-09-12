@@ -6,8 +6,8 @@
         <button type="button" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">Account Summary</button>
       </div>
       <div class="history-filter-actions">
-        <button type="button" *ngIf="viewMode === 'records' && calls.length" class="button secondary" (click)="exportRequested.emit()">Export CSV</button>
-        <button type="button" class="button secondary" (click)="printRequested.emit()">Printable Account List</button>
+        <button type="button" *ngIf="isAdmin && viewMode === 'records' && calls.length" class="button secondary" (click)="exportRequested.emit()">Export CSV</button>
+        <button type="button" *ngIf="isAdmin" class="button secondary" (click)="printRequested.emit()">Printable Account List</button>
       </div>
     </div>
     <div class="history-filters-grid">
@@ -21,12 +21,6 @@
           <button *ngIf="accountFilter" class="clear-btn" type="button" title="Clear account search" (click)="onAccountFilterChanged('')">&times;</button>
         </div>
         <datalist id="historyAccountOptions"><option *ngFor="let accountName of accountOptions" [value]="accountName"></option></datalist>
-      </label>
-      <label *ngIf="isAdmin">Sales Rep Filter
-        <select [ngModel]="selectedRep" (ngModelChange)="selectedRepChange.emit($event); filtersChanged.emit()">
-          <option value="">All Sales Reps</option>
-          <option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}}</option>
-        </select>
       </label>
     </div>
   </div>

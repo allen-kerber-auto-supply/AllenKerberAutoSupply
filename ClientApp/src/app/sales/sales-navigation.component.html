@@ -25,7 +25,7 @@
   <button type="button" [class.active]="activeTab === 'history'" (click)="selectTab('history')">
     <i>📜</i> Call History
   </button>
-  <button type="button" *ngIf="isAdmin" [class.active]="activeTab === 'admin'" (click)="selectTab('admin')">
+  <button type="button" *ngIf="canViewAdminTab" [class.active]="activeTab === 'admin'" (click)="selectTab('admin')">
     <i>⚙️</i> Reps &amp; Accounts
   </button>
 </div>

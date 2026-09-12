@@ -36,37 +36,36 @@
     <section *ngIf="authenticated && destination==='sales'" class="workspace sales-workspace">
       <app-sales-navigation
         [isAdmin]="isSalesAdmin"
+        [canViewAdminTab]="isSalesAdminView"
         [reps]="salesReps"
         [scheduledCount]="scheduledCalls.length"
         [activeTab]="salesTab"
         [selectedRep]="selectedSalesFilterRep"
         (tabChange)="setSalesTab($event)"
-        (selectedRepChange)="selectedSalesFilterRep = $event"
+        (selectedRepChange)="onSalesFilterRepChange($event)"
         (repFilterChange)="onFilterRepChange()"></app-sales-navigation>
 
       <app-scheduled-calls
         *ngIf="salesTab==='scheduled'"
         [calls]="scheduledCalls"
         [loading]="loadingScheduledCalls"
-        [isAdmin]="isSalesAdmin"
+        [isAdmin]="isSalesAdminView"
         (newCallRequested)="setSalesTab('new-call')"
         (callSelected)="openCallDetails($event)"
         (completeRequested)="openCompleteModal($event)"
         (deleteRequested)="deleteCall($event)"></app-scheduled-calls>
 
-      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdmin" [currentUserEmail]="currentUserEmail" (saved)="loadScheduledCalls()"></app-new-call>
+      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="loadScheduledCalls()"></app-new-call>
 
       <app-sales-history
         *ngIf="salesTab==='history'"
-        [isAdmin]="isSalesAdmin"
+        [isAdmin]="isSalesAdminView"
         [viewMode]="historyViewMode"
         [loading]="loadingHistory"
         [dateFrom]="historyDateFrom"
         [dateTo]="historyDateTo"
         [accountFilter]="historyAccountFilter"
         [accountOptions]="callHistoryAccountOptions"
-        [selectedRep]="selectedSalesFilterRep"
-        [reps]="salesReps"
         [calls]="filteredCallHistory"
         [summaries]="filteredAccountSummaries"
         [selectedSummaryAccount]="selectedSummaryAccount"
@@ -76,7 +75,6 @@
         (viewModeChange)="historyViewMode = $event"
         (filtersChanged)="loadCallHistory()"
         (accountFilterChange)="historyAccountFilter = $event"
-        (selectedRepChange)="selectedSalesFilterRep = $event"
         (exportRequested)="exportHistoryCsv()"
         (printRequested)="printAccountList()"
         (callSelected)="openCallDetails($event)"
@@ -86,7 +84,7 @@
         (summaryClosed)="clearSelectedSummaryAccount()"></app-sales-history>
 
       <app-sales-admin
-        *ngIf="salesTab==='admin' && isSalesAdmin"
+        *ngIf="salesTab==='admin' && isSalesAdminView"
         [reps]="salesReps"
         [unassignedCustomers]="unassignedCustomerOptions"
         [customers]="filteredSalesCustomers"
