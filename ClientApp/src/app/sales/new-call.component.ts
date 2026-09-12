@@ -4,8 +4,15 @@ import { FormsModule } from '@angular/forms';
 import { SalesCall, SalesCustomer, SalesRep } from '../shared/models';
 import { SalesService } from './sales.service';
 
-function today(): string { return new Date().toISOString().slice(0, 10); }
-function nowTime(): string { return new Date().toISOString().slice(11, 16); }
+function padTimePart(value: number): string { return value.toString().padStart(2, '0'); }
+function today(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${padTimePart(now.getMonth() + 1)}-${padTimePart(now.getDate())}`;
+}
+function nowTime(): string {
+  const now = new Date();
+  return `${padTimePart(now.getHours())}:${padTimePart(now.getMinutes())}`;
+}
 
 @Component({
   selector: 'app-new-call',
@@ -172,7 +179,28 @@ export class NewCallComponent implements OnChanges {
   private combineCallDateAndTime(callDate?: string, callTime?: string): string | null {
     const normalizedDate = (callDate || '').trim();
     const normalizedTime = (callTime || '').trim();
-    return normalizedDate && /^\d{2}:\d{2}$/.test(normalizedTime)
+    const dateMatch = normalizedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch = normalizedTime.match(/^(\d{2}):(\d{2})$/);
+    if (!dateMatch || !timeMatch) return null;
+
+    const [, yearText, monthText, dayText] = dateMatch;
+    const [, hourText, minuteText] = timeMatch;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    const daysInMonth = this.daysInMonth(year, month);
+
+    return year >= 1
+      && month >= 1
+      && month <= 12
+      && day >= 1
+      && day <= daysInMonth
+      && hour >= 0
+      && hour <= 23
+      && minute >= 0
+      && minute <= 59
       ? `${normalizedDate}T${normalizedTime}:00`
       : null;
   }
@@ -180,5 +208,14 @@ export class NewCallComponent implements OnChanges {
   private parseWholeMinutes(value: number | null): number | null {
     if (value === null || value === undefined) return 0;
     return Number.isInteger(value) && value >= 0 ? value : null;
+  }
+
+  private daysInMonth(year: number, month: number): number {
+    if (month === 2) return this.isLeapYear(year) ? 29 : 28;
+    return [4, 6, 9, 11].includes(month) ? 30 : 31;
+  }
+
+  private isLeapYear(year: number): boolean {
+    return year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
   }
 }
