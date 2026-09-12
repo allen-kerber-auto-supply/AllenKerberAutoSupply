@@ -14,24 +14,33 @@
         </div>
       </div>
       <div class="form-grid-2"><label>Contact Name<input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person"></label><label>Phone Number<input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000"></label></div>
-      <div class="form-grid-2"><label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label><label>Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label></div>
       <div class="form-grid-2">
-        <label>Call Time
-          <div class="time-parts">
-            <input type="number" [(ngModel)]="callTimeHours" name="callTimeHours" min="0" max="23" step="1" required aria-label="Call time hours">
-            <span>:</span>
-            <input type="number" [(ngModel)]="callTimeMinutes" name="callTimeMinutes" min="0" max="59" step="1" required aria-label="Call time minutes">
+        <div class="call-date-panel">
+          <label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
+          <div class="form-grid-2 call-timing-grid">
+            <label>Call Time *
+              <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null">
+              <small *ngIf="callTimeError" id="call-time-error" class="field-error">{{callTimeError}}</small>
+            </label>
+            <fieldset class="duration-fieldset" [class.invalid-fieldset]="durationHoursError || durationMinutesError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationMinutesError ? (durationHoursError ? ' duration-minutes-error' : 'duration-minutes-error') : '') + (durationTotalError ? ((durationHoursError || durationMinutesError) ? ' duration-total-error' : 'duration-total-error') : '') || null">
+              <legend>Call Duration *</legend>
+              <div class="time-parts">
+                <label class="time-part-field">Hours
+                  <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required [class.invalid-input]="durationHoursError" [attr.aria-describedby]="durationHoursError ? 'duration-hours-error' : null" [attr.aria-invalid]="durationHoursError ? 'true' : null">
+                  <small *ngIf="durationHoursError" id="duration-hours-error" class="field-error">{{durationHoursError}}</small>
+                </label>
+                <span aria-hidden="true">:</span>
+                <label class="time-part-field">Minutes
+                  <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required [class.invalid-input]="durationMinutesError" [attr.aria-describedby]="durationMinutesError ? 'duration-minutes-error' : null" [attr.aria-invalid]="durationMinutesError ? 'true' : null">
+                  <small *ngIf="durationMinutesError" id="duration-minutes-error" class="field-error">{{durationMinutesError}}</small>
+                </label>
+              </div>
+              <small *ngIf="durationTotalError" id="duration-total-error" class="field-error">{{durationTotalError}}</small>
+              <small *ngIf="!durationTotalError" class="input-hint">Duration cannot exceed 8:00.</small>
+            </fieldset>
           </div>
-          <small class="input-hint">Use 0–23 hours and 0–59 minutes.</small>
-        </label>
-        <label>Call Duration
-          <div class="time-parts">
-            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required aria-label="Call duration hours">
-            <span>:</span>
-            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required aria-label="Call duration minutes">
-          </div>
-          <small class="input-hint">Duration cannot exceed 8:00.</small>
-        </label>
+        </div>
+        <label>Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label>
       </div>
       <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>
       <div class="form-grid-2"><label>Status<select [(ngModel)]="newCall.status" name="status"><option [ngValue]="1">Completed</option><option [ngValue]="0">Scheduled / Open</option></select></label><label>Follow-up Date (Optional)<input type="date" [(ngModel)]="newCall.followUpDate" name="followUpDate"><small *ngIf="newCall.followUpDate" class="input-hint">Automatically schedules a follow-up call on this date</small></label></div>

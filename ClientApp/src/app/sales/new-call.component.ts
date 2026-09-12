@@ -4,9 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { SalesCall, SalesCustomer, SalesRep } from '../shared/models';
 import { SalesService } from './sales.service';
 
-function today(): string { return new Date().toISOString().slice(0, 10); }
 function padTime(value: number): string { return value.toString().padStart(2, '0'); }
-function currentTimePart(getValue: (date: Date) => number): number { return getValue(new Date()); }
+function localDateValue(date: Date): string { return `${date.getFullYear()}-${padTime(date.getMonth() + 1)}-${padTime(date.getDate())}`; }
+function currentTimeValue(date: Date): string { return `${padTime(date.getHours())}:${padTime(date.getMinutes())}`; }
 
 @Component({
   selector: 'app-new-call',
@@ -28,8 +28,7 @@ export class NewCallComponent implements OnChanges {
   loadingCustomerHistory = false;
   savingCall = false;
   callErrorMessage = '';
-  callTimeHours = currentTimePart(date => date.getHours());
-  callTimeMinutes = currentTimePart(date => date.getMinutes());
+  callTime = currentTimeValue(new Date());
   durationHours = 0;
   durationMinutes = 0;
 
@@ -49,6 +48,22 @@ export class NewCallComponent implements OnChanges {
 
   get hasInvalidCallTiming(): boolean {
     return !!this.validateCallTiming();
+  }
+
+  get callTimeError(): string {
+    return this.validateCallTime();
+  }
+
+  get durationHoursError(): string {
+    return this.validateDurationHours();
+  }
+
+  get durationMinutesError(): string {
+    return this.validateDurationMinutes();
+  }
+
+  get durationTotalError(): string {
+    return this.validateDurationTotal();
   }
 
   isAssignedSalesCustomer(accountName: string): boolean {
@@ -85,9 +100,9 @@ export class NewCallComponent implements OnChanges {
   }
 
   resetNewCallForm(): void {
-    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
-    this.callTimeHours = currentTimePart(date => date.getHours());
-    this.callTimeMinutes = currentTimePart(date => date.getMinutes());
+    const now = new Date();
+    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: localDateValue(now), followUpDate: '' };
+    this.callTime = currentTimeValue(now);
     this.durationHours = 0;
     this.durationMinutes = 0;
     this.setDefaultRep();
@@ -107,11 +122,17 @@ export class NewCallComponent implements OnChanges {
       return;
     }
 
+    const parsedCallTime = this.parseCallTime();
+    if (!parsedCallTime) {
+      this.callErrorMessage = 'Enter a valid call time.';
+      return;
+    }
+
     this.savingCall = true;
     this.callErrorMessage = '';
     const payload: SalesCall = {
       ...this.newCall,
-      callDate: `${this.newCall.callDate}T${padTime(this.callTimeHours)}:${padTime(this.callTimeMinutes)}:00`,
+      callDate: `${this.newCall.callDate}T${padTime(parsedCallTime.hours)}:${padTime(parsedCallTime.minutes)}:${padTime(parsedCallTime.seconds)}`,
       callDuration: this.durationHours * 60 + this.durationMinutes,
       followUpDate: this.newCall.followUpDate || undefined
     };
@@ -138,35 +159,64 @@ export class NewCallComponent implements OnChanges {
   }
 
   private emptyCall(): SalesCall {
-    return { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    return { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: localDateValue(new Date()), followUpDate: '' };
   }
 
   private validateCallTiming(): string {
-    if (!this.isWholeNumberInRange(this.callTimeHours, 0, 23)) {
-      return 'Call time hours must be between 0 and 23.';
+    return this.callTimeError || this.durationHoursError || this.durationMinutesError || this.durationTotalError;
+  }
+
+  private isWholeNumberInRange(value: number, min: number, max: number): boolean {
+    return Number.isInteger(value) && value >= min && value <= max;
+  }
+
+  private validateCallTime(): string {
+    if (!this.callTime) {
+      return 'Call time is required.';
     }
 
-    if (!this.isWholeNumberInRange(this.callTimeMinutes, 0, 59)) {
-      return 'Call time minutes must be between 0 and 59.';
-    }
-
-    if (!this.isWholeNumberInRange(this.durationHours, 0, 8)) {
-      return 'Call duration hours must be between 0 and 8.';
-    }
-
-    if (!this.isWholeNumberInRange(this.durationMinutes, 0, 59)) {
-      return 'Call duration minutes must be between 0 and 59.';
-    }
-
-    if (this.durationHours === 8 && this.durationMinutes > 0) {
-      return 'Call duration cannot exceed 8 hours.';
+    if (!this.parseCallTime()) {
+      return 'Enter a valid call time.';
     }
 
     return '';
   }
 
-  private isWholeNumberInRange(value: number, min: number, max: number): boolean {
-    return Number.isInteger(value) && value >= min && value <= max;
+  private parseCallTime(): { hours: number; minutes: number; seconds: number; } | null {
+    const match = this.callTime.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      hours: Number.parseInt(match[1], 10),
+      minutes: Number.parseInt(match[2], 10),
+      seconds: Number.parseInt(match[3] || '0', 10)
+    };
+  }
+
+  private validateDurationHours(): string {
+    if (!this.isWholeNumberInRange(this.durationHours, 0, 8)) {
+      return 'Hours must be a whole number between 0 and 8.';
+    }
+
+    return '';
+  }
+
+  private validateDurationMinutes(): string {
+    if (!this.isWholeNumberInRange(this.durationMinutes, 0, 59)) {
+      return 'Minutes must be a whole number between 0 and 59.';
+    }
+
+    return '';
+  }
+
+  private validateDurationTotal(): string {
+    if (!this.durationHoursError && !this.durationMinutesError && this.durationHours === 8 && this.durationMinutes > 0) {
+      return 'Call duration cannot exceed 8:00.';
+    }
+
+    return '';
   }
 
   private setDefaultRep(): void {
