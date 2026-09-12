@@ -110,6 +110,13 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
         return record is not null ? Ok(record) : NotFound("Call record not found.");
     }
 
+    [HttpPost("calls/{callId:int}/convert-prospect")]
+    public async Task<IActionResult> ConvertProspectToCustomer(int callId, CancellationToken cancellationToken)
+    {
+        var success = await repository.ConvertProspectToCustomerAsync(callId, cancellationToken);
+        return success ? Ok(new { message = "Prospect added as a sales customer." }) : NotFound("Call record not found.");
+    }
+
     [HttpGet("calls")]
     public async Task<IActionResult> GetCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, CancellationToken cancellationToken)
     {

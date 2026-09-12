@@ -253,6 +253,23 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         return call;
     }
 
+    private async Task<List<SalesCall>> ApplyCustomerStatusAsync(IEnumerable<SalesCall> calls, CancellationToken cancellationToken)
+    {
+        var customerSnapshot = await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken);
+        var customerNames = customerSnapshot.Documents
+            .Select(document => MapSalesCustomer(document).CustomerName.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var result = calls.ToList();
+        foreach (var call in result)
+        {
+            call.IsProspect = !customerNames.Contains((call.AccountName ?? string.Empty).Trim());
+        }
+
+        return result;
+    }
+
     // Sales Reps
     public async Task<IReadOnlyList<SalesRep>> GetSalesRepListAsync(CancellationToken cancellationToken = default)
     {
@@ -410,6 +427,32 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         return true;
     }
 
+    public async Task<bool> ConvertProspectToCustomerAsync(int callId, CancellationToken cancellationToken = default)
+    {
+        var callDoc = await firestore.Collection("sales_calls").Document(callId.ToString()).GetSnapshotAsync(cancellationToken);
+        if (!callDoc.Exists)
+            return false;
+
+        var call = MapSalesCall(callDoc);
+        string accountName = (call.AccountName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(accountName))
+            return false;
+
+        await InsertSalesCustomerAsync(accountName, cancellationToken);
+
+        var callSnapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        foreach (var document in callSnapshot.Documents)
+        {
+            var existingCall = MapSalesCall(document);
+            if (!string.Equals(existingCall.AccountName?.Trim(), accountName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            await document.Reference.UpdateAsync(nameof(SalesCall.IsProspect), false, cancellationToken: cancellationToken);
+        }
+
+        return true;
+    }
+
     public async Task<bool> DeleteSalesCustomerAsync(string customerName, CancellationToken cancellationToken = default)
     {
         string name = (customerName ?? string.Empty).Trim();
@@ -524,7 +567,11 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     public async Task<SalesCall?> GetCallRecordAsync(int callId, CancellationToken cancellationToken = default)
     {
         var doc = await firestore.Collection("sales_calls").Document(callId.ToString()).GetSnapshotAsync(cancellationToken);
-        return doc.Exists ? MapSalesCall(doc) : null;
+        if (!doc.Exists)
+            return null;
+
+        var calls = await ApplyCustomerStatusAsync([MapSalesCall(doc)], cancellationToken);
+        return calls[0];
     }
 
     public async Task<IReadOnlyList<SalesCall>> GetCallRecordsAsync(string salesRepEmail, DateTime fromDate, DateTime toDate, CancellationToken cancellationToken = default)
@@ -544,10 +591,12 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
 
-        return snapshot.Documents
+        var calls = snapshot.Documents
             .Select(MapSalesCall)
             .OrderByDescending(c => c.CallDate)
             .ToList();
+
+        return await ApplyCustomerStatusAsync(calls, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SalesCall>> GetCallRecordsForAccountAsync(string accountName, CancellationToken cancellationToken = default)
@@ -560,11 +609,13 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             .WhereEqualTo(nameof(SalesCall.AccountName), name)
             .GetSnapshotAsync(cancellationToken);
 
-        return snapshot.Documents
+        var calls = snapshot.Documents
             .Select(MapSalesCall)
             .Where(c => string.Equals((c.AccountName ?? string.Empty).Trim(), name, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(c => c.CallDate ?? c.CreatedDate)
             .ToList();
+
+        return await ApplyCustomerStatusAsync(calls, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SalesCall>> GetUpComingCallRecordsAsync(string salesRepEmail, DateTime currentDateTime, DateTime fromDate, CancellationToken cancellationToken = default)
@@ -593,7 +644,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             .OrderBy(c => c.CallDate ?? c.FollowUpDate)
             .ToList();
 
-        return calls;
+        return await ApplyCustomerStatusAsync(calls, cancellationToken);
     }
 
     public async Task<IReadOnlyList<AccountCallsSummary>> GetCallsByAccountAsync(string salesRepEmail, CancellationToken cancellationToken = default)
@@ -609,8 +660,12 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
 
-        return snapshot.Documents
+        var calls = snapshot.Documents
             .Select(MapSalesCall)
+            .ToList();
+        calls = await ApplyCustomerStatusAsync(calls, cancellationToken);
+
+        return calls
             .GroupBy(c => new { c.AccountName, c.IsProspect })
             .Select(g => new AccountCallsSummary
             {
@@ -639,6 +694,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             .Select(MapSalesCall)
             .OrderByDescending(c => c.CallDate ?? c.CreatedDate)
             .ToList();
+        calls = await ApplyCustomerStatusAsync(calls, cancellationToken);
 
         return calls
             .GroupBy(c => c.AccountName)
