@@ -17,4 +17,12 @@ export class CallDetailsComponent {
   @Output() closed = new EventEmitter<void>();
   @Output() convertRequested = new EventEmitter<void>();
   @Output() editRequested = new EventEmitter<SalesCall>();
+
+  formatCallDuration(duration?: number): string {
+    if (duration == null || duration < 0) return '—';
+
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+  }
 }
