@@ -10,6 +10,8 @@ namespace AllenKerberAutoSupply.Controllers;
 [Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.SalesAdmin},{RoleNames.SalesUser}")]
 public sealed class SalesController(ISalesRepository repository) : ControllerBase
 {
+    private const int MaxCallDurationMinutes = 8 * 60;
+
     private string GetEffectiveRepEmail(string? requestedRepEmail)
     {
         var currentUserEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
@@ -154,6 +156,11 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
     public async Task<IActionResult> InsertCallRecord([FromBody] SalesCall call, CancellationToken cancellationToken)
     {
         call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
+        if (call.CallDuration < 0 || call.CallDuration > MaxCallDurationMinutes)
+        {
+            return BadRequest(new { message = "Call duration must be between 0 and 480 minutes." });
+        }
+
         if (string.IsNullOrWhiteSpace(call.SalesRepEmail))
         {
             call.SalesRepEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
@@ -192,6 +199,11 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
     public async Task<IActionResult> UpdateCallRecord([FromBody] SalesCall call, CancellationToken cancellationToken)
     {
         call.AccountName = (call.AccountName ?? string.Empty).Trim().ToUpperInvariant();
+        if (call.CallDuration < 0 || call.CallDuration > MaxCallDurationMinutes)
+        {
+            return BadRequest(new { message = "Call duration must be between 0 and 480 minutes." });
+        }
+
         if (string.IsNullOrWhiteSpace(call.SalesRepEmail))
         {
             call.SalesRepEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;

@@ -106,6 +106,7 @@ export interface SalesCall {
   contactName?: string;
   phone?: string;
   contactPhone?: string;
+  callDuration?: number;
   comments?: string;
   createdDate?: string;
   callDate?: string;
