@@ -23,7 +23,8 @@
           <span *ngIf="!call.contactPhone && !call.phone">—</span>
         </span>
       </div>
-      <div class="call-detail-item"><span class="call-detail-label">Call Date</span><span class="call-detail-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div>
+      <div class="call-detail-item"><span class="call-detail-label">Call Date</span><span class="call-detail-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy h:mm a'}}</span></div>
+      <div class="call-detail-item"><span class="call-detail-label">Call Duration</span><span class="call-detail-value">{{formatCallDuration(call.callDuration)}}</span></div>
       <div class="call-detail-item"><span class="call-detail-label">Follow-up</span><span class="call-detail-value">{{call.followUpDate ? (call.followUpDate | date:'M/d/yyyy') : '—'}}</span></div>
       <div class="call-detail-item full-width"><span class="call-detail-label">Rep</span><span class="call-detail-value">{{call.repName || call.salesRepEmail || call.repEmail || '—'}}</span></div>
       <div class="call-detail-item full-width"><span class="call-detail-label">Comments</span><span class="call-detail-value">{{call.comments || '—'}}</span></div>
