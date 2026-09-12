@@ -24,9 +24,11 @@
         <fieldset class="call-duration-field">
           <legend>Call Duration</legend>
           <div class="time-parts">
-            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required #durationHoursModel="ngModel" aria-label="Call duration hours" [attr.aria-describedby]="getDurationHoursDescribedBy(durationHoursModel, durationMinutesModel)" [attr.aria-invalid]="showFieldValidation(durationHoursModel, durationHoursValidationMessage) || showDurationLimitValidation(durationHoursModel, durationMinutesModel) ? 'true' : null">
+            <label class="visually-hidden" for="callDurationHours">Call duration hours</label>
+            <input id="callDurationHours" type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required #durationHoursModel="ngModel" [attr.aria-describedby]="getDurationHoursDescribedBy(durationHoursModel, durationMinutesModel)" [attr.aria-invalid]="showFieldValidation(durationHoursModel, durationHoursValidationMessage) || showDurationLimitValidation(durationHoursModel, durationMinutesModel) ? 'true' : null">
             <span>:</span>
-            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required #durationMinutesModel="ngModel" aria-label="Call duration minutes" [attr.aria-describedby]="getDurationMinutesDescribedBy(durationHoursModel, durationMinutesModel)" [attr.aria-invalid]="showFieldValidation(durationMinutesModel, durationMinutesValidationMessage) || showDurationLimitValidation(durationHoursModel, durationMinutesModel) ? 'true' : null">
+            <label class="visually-hidden" for="callDurationMinutes">Call duration minutes</label>
+            <input id="callDurationMinutes" type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required #durationMinutesModel="ngModel" [attr.aria-describedby]="getDurationMinutesDescribedBy(durationHoursModel, durationMinutesModel)" [attr.aria-invalid]="showFieldValidation(durationMinutesModel, durationMinutesValidationMessage) || showDurationLimitValidation(durationHoursModel, durationMinutesModel) ? 'true' : null">
           </div>
           <small *ngIf="showFieldValidation(durationHoursModel, durationHoursValidationMessage)" id="duration-hours-error" class="input-error" aria-live="polite">{{durationHoursValidationMessage}}</small>
           <small *ngIf="showFieldValidation(durationMinutesModel, durationMinutesValidationMessage)" id="duration-minutes-error" class="input-error" aria-live="polite">{{durationMinutesValidationMessage}}</small>
