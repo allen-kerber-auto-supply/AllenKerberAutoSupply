@@ -1,3 +1,55 @@
 :host {
   display: contents;
 }
+
+.modal-backdrop {
+  color: var(--text);
+}
+
+:host-context(.dark-theme) .modal-backdrop {
+  --bg: #0b1120;
+  --surface: #131c30;
+  --soft: #19243a;
+  --text: #eff4ff;
+  --muted: #aab7cd;
+  --line: #2b3954;
+  --blue: #7da9ff;
+  --shadow: 0 20px 50px #0007;
+}
+
+.modal {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.modal p,
+.modal label,
+.modal legend {
+  color: var(--text);
+}
+
+.modal input,
+.modal textarea,
+.modal select,
+.modal fieldset {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--text);
+}
+
+.call-duration-field {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.time-parts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+}
