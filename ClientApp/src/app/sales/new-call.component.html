@@ -22,7 +22,7 @@
               <input type="time" [(ngModel)]="callTime" name="callTime" min="00:00" max="23:59" step="60" required [class.invalid-input]="callTimeError" [attr.aria-describedby]="callTimeError ? 'call-time-error' : null" [attr.aria-invalid]="callTimeError ? 'true' : null">
               <small *ngIf="callTimeError" id="call-time-error" class="field-error">{{callTimeError}}</small>
             </label>
-            <fieldset class="duration-fieldset" [class.invalid-fieldset]="durationTotalError" [attr.aria-describedby]="durationTotalError ? 'duration-total-error' : null">
+            <fieldset class="duration-fieldset" [class.invalid-fieldset]="durationHoursError || durationMinutesError || durationTotalError" [attr.aria-describedby]="(durationHoursError ? 'duration-hours-error' : '') + (durationMinutesError ? (durationHoursError ? ' duration-minutes-error' : 'duration-minutes-error') : '') + (durationTotalError ? ((durationHoursError || durationMinutesError) ? ' duration-total-error' : 'duration-total-error') : '') || null">
               <legend>Call Duration *</legend>
               <div class="time-parts">
                 <label class="time-part-field">Hours
