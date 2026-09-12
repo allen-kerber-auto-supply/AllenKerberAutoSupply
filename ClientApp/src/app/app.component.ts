@@ -75,7 +75,7 @@ export class AppComponent implements OnInit {
   private callSuccessToastTimer: number | null = null;
 
   get isSalesAdminView(): boolean {
-    return this.isSalesAdmin && !this.selectedSalesFilterRep;
+    return this.isSalesAdmin;
   }
   completingCall: SalesCall | null = null;
   completingComments = '';
