@@ -19,7 +19,7 @@
         <label class="call-time-field">Call Time *
           <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" [attr.aria-describedby]="callTimeDescribedBy" [attr.aria-invalid]="callTimeValidationMessage ? 'true' : null">
           <small id="call-time-hint" class="input-hint">Use the time picker to select the call time.</small>
-          <small *ngIf="callTimeValidationMessage" id="call-time-error" class="input-error">{{callTimeValidationMessage}}</small>
+          <small *ngIf="callTimeValidationMessage" id="call-time-error" class="input-error" aria-live="polite">{{callTimeValidationMessage}}</small>
         </label>
         <fieldset class="call-duration-field">
           <legend>Call Duration</legend>
@@ -28,9 +28,9 @@
             <span>:</span>
             <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required aria-label="Call duration minutes" [attr.aria-describedby]="durationMinutesDescribedBy" [attr.aria-invalid]="durationMinutesValidationMessage || durationLimitValidationMessage ? 'true' : null">
           </div>
-          <small *ngIf="durationHoursValidationMessage" id="duration-hours-error" class="input-error">{{durationHoursValidationMessage}}</small>
-          <small *ngIf="durationMinutesValidationMessage" id="duration-minutes-error" class="input-error">{{durationMinutesValidationMessage}}</small>
-          <small *ngIf="durationLimitValidationMessage" id="duration-limit-error" class="input-error">{{durationLimitValidationMessage}}</small>
+          <small *ngIf="durationHoursValidationMessage" id="duration-hours-error" class="input-error" aria-live="polite">{{durationHoursValidationMessage}}</small>
+          <small *ngIf="durationMinutesValidationMessage" id="duration-minutes-error" class="input-error" aria-live="polite">{{durationMinutesValidationMessage}}</small>
+          <small *ngIf="durationLimitValidationMessage" id="duration-limit-error" class="input-error" aria-live="polite">{{durationLimitValidationMessage}}</small>
           <small class="input-hint">Duration cannot exceed 8:00.</small>
         </fieldset>
         <label class="sales-rep-field">Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label>
