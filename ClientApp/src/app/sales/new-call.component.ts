@@ -5,6 +5,7 @@ import { SalesCall, SalesCustomer, SalesRep } from '../shared/models';
 import { SalesService } from './sales.service';
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
+function nowTime(): string { return new Date().toISOString().slice(11, 16); }
 
 @Component({
   selector: 'app-new-call',
@@ -26,6 +27,9 @@ export class NewCallComponent implements OnChanges {
   loadingCustomerHistory = false;
   savingCall = false;
   callErrorMessage = '';
+  callTime = nowTime();
+  callDurationHours: number | null = 0;
+  callDurationMinutes: number | null = 0;
 
   constructor(private readonly salesService: SalesService) {
     this.resetNewCallForm();
@@ -75,7 +79,10 @@ export class NewCallComponent implements OnChanges {
   }
 
   resetNewCallForm(): void {
-    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', callDuration: 0, repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    this.callTime = nowTime();
+    this.callDurationHours = 0;
+    this.callDurationMinutes = 0;
     this.setDefaultRep();
     this.selectedCustomerHistory = [];
     this.callErrorMessage = '';
@@ -87,12 +94,35 @@ export class NewCallComponent implements OnChanges {
       return;
     }
 
+    const durationHours = this.parseWholeMinutes(this.callDurationHours);
+    if (durationHours === null) {
+      this.callErrorMessage = 'Duration hours must be a whole number of 0 or more.';
+      return;
+    }
+
+    const durationMinutes = this.parseWholeMinutes(this.callDurationMinutes);
+    if (durationMinutes === null || durationMinutes > 59) {
+      this.callErrorMessage = 'Duration minutes must be a whole number between 0 and 59.';
+      return;
+    }
+
+    const callDateTime = this.combineCallDateAndTime(this.newCall.callDate, this.callTime);
+    if (!callDateTime) {
+      this.callErrorMessage = 'A valid call date and time are required.';
+      return;
+    }
+
     this.savingCall = true;
     this.callErrorMessage = '';
     const rep = this.reps.find(item => (item.repEmail || item.email || '').toLowerCase() === (this.newCall.repEmail || '').toLowerCase());
     if (rep) this.newCall.repName = rep.repName || rep.name || '';
 
-    this.salesService.createCall({ ...this.newCall, followUpDate: this.newCall.followUpDate || undefined }).subscribe({
+    this.salesService.createCall({
+      ...this.newCall,
+      callDate: callDateTime,
+      callDuration: (durationHours * 60) + durationMinutes,
+      followUpDate: this.newCall.followUpDate || undefined
+    }).subscribe({
       next: () => {
         this.savingCall = false;
         this.resetNewCallForm();
@@ -112,7 +142,7 @@ export class NewCallComponent implements OnChanges {
   }
 
   private emptyCall(): SalesCall {
-    return { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    return { accountName: '', contactName: '', phone: '', comments: '', callDuration: 0, repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
   }
 
   private setDefaultRep(): void {
@@ -137,5 +167,18 @@ export class NewCallComponent implements OnChanges {
   private applyAssignedRep(customer: SalesCustomer): void {
     const assigned = this.assignedRepEmails(customer)[0];
     if (assigned) this.newCall.repEmail = assigned;
+  }
+
+  private combineCallDateAndTime(callDate?: string, callTime?: string): string | null {
+    const normalizedDate = (callDate || '').trim();
+    const normalizedTime = (callTime || '').trim();
+    return normalizedDate && /^\d{2}:\d{2}$/.test(normalizedTime)
+      ? `${normalizedDate}T${normalizedTime}:00`
+      : null;
+  }
+
+  private parseWholeMinutes(value: number | null): number | null {
+    if (value === null || value === undefined) return 0;
+    return Number.isInteger(value) && value >= 0 ? value : null;
   }
 }

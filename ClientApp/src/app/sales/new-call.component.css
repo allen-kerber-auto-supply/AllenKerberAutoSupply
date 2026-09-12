@@ -4,6 +4,8 @@
 
 .form-card, .history-sidebar { min-width: 0; }
 
+.call-date-details-grid { align-content: start; }
+
 @media (max-width: 980px) {
   .new-call-layout { grid-template-columns: 1fr; }
 }

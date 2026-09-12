@@ -107,6 +107,7 @@ export interface SalesCall {
   phone?: string;
   contactPhone?: string;
   comments?: string;
+  callDuration?: number;
   createdDate?: string;
   callDate?: string;
   followUpDate?: string;
