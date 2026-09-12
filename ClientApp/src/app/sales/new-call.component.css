@@ -57,7 +57,7 @@
 }
 
 .invalid-input:focus {
-  outline: 3px solid color-mix(in srgb, #dc4d4d 25%, transparent);
+  outline: 3px solid rgba(220, 77, 77, 0.25);
   border-color: #dc4d4d;
 }
 
