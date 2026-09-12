@@ -438,7 +438,42 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         if (string.IsNullOrWhiteSpace(accountName))
             return false;
 
-        await InsertSalesCustomerAsync(accountName, cancellationToken);
+        var allCustomers = await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken);
+        var customerDocument = allCustomers.Documents.FirstOrDefault(document =>
+        {
+            var customer = MapSalesCustomer(document);
+            return string.Equals(customer.CustomerName, accountName, StringComparison.OrdinalIgnoreCase);
+        });
+
+        var salesRepEmail = (call.SalesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
+        if (customerDocument is null)
+        {
+            int nextId = allCustomers.Documents.Count > 0
+                ? allCustomers.Documents.Select(document => MapSalesCustomer(document).CustomerNumber).DefaultIfEmpty(0).Max() + 1
+                : 1;
+            var customer = new SalesCustomer
+            {
+                CustomerNumber = nextId,
+                CustomerName = accountName,
+                Guid = Guid.NewGuid().ToString(),
+                AssignedSalesReps = string.IsNullOrWhiteSpace(salesRepEmail) ? [] : [salesRepEmail]
+            };
+
+            await firestore.Collection("sales_customers").Document(nextId.ToString())
+                .SetAsync(customer, cancellationToken: cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(salesRepEmail))
+        {
+            var customer = MapSalesCustomer(customerDocument);
+            if (!customer.AssignedSalesReps.Any(rep => string.Equals(rep, salesRepEmail, StringComparison.OrdinalIgnoreCase)))
+            {
+                customer.AssignedSalesReps.Add(salesRepEmail);
+                await customerDocument.Reference.UpdateAsync(
+                    nameof(SalesCustomer.AssignedSalesReps),
+                    customer.AssignedSalesReps,
+                    cancellationToken: cancellationToken);
+            }
+        }
 
         var callSnapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
         foreach (var document in callSnapshot.Documents)

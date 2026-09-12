@@ -540,7 +540,7 @@ function toDateInputValue(date: Date): string { return date.toISOString().slice(
                   <td><b>{{getAccountName(c)}}</b></td>
                   <td>{{formatAssignedReps(c)}}</td>
                   <td class="action-cell">
-                    <button class="button danger view-btn" type="button" (click)="deleteSalesCustomer(c)">Remove</button>
+                    <button *ngIf="hasAssignedSalesReps(c)" class="button danger view-btn" type="button" (click)="deleteSalesCustomer(c)">Remove</button>
                   </td>
                 </tr>
               </tbody>
@@ -1734,11 +1734,6 @@ class AppComponent implements OnInit {
               accountName: customerName,
               assignedSalesReps: Array.isArray(c.assignedSalesReps) ? c.assignedSalesReps : (Array.isArray(c.assigned_sales_reps) ? c.assigned_sales_reps : [])
             };
-          })
-          .filter(customer => {
-            const name = this.getAccountName(customer).trim().toLowerCase();
-            return !!name && !this.salesCustomers.some(salesCustomer =>
-              this.getAccountName(salesCustomer).trim().toLowerCase() === name && (salesCustomer.assignedSalesReps || []).length > 0);
           });
       },
       error: () => {
@@ -2095,6 +2090,12 @@ class AppComponent implements OnInit {
     }).join(', ');
   }
 
+  hasAssignedSalesReps(c: any): boolean {
+    if (!c || typeof c === 'string') return false;
+    const reps = Array.isArray(c.assignedSalesReps) ? c.assignedSalesReps : c.assigned_sales_reps;
+    return Array.isArray(reps) && reps.length > 0;
+  }
+
   getRepDisplayName(repName?: string, repEmail?: string): string {
     if (repName && repName.trim()) return repName;
     if (!repEmail) return '—';
@@ -2189,8 +2190,11 @@ class AppComponent implements OnInit {
 
   deleteSalesCustomer(cust: any) {
     const name = this.getAccountName(cust);
-    if (!name || !confirm(`Remove customer account "${name}"?`)) return;
-    this.http.delete(`/api/sales/customers/${encodeURIComponent(name)}`).subscribe({
+    const assignedRepEmails = this.getAssignedRepEmails(cust);
+    if (!name || !assignedRepEmails.length || !confirm(`Unassign customer account "${name}"?`)) return;
+    forkJoin(assignedRepEmails.map(repEmail => this.http.delete('/api/sales/assignments', {
+      body: { customerName: name, repEmail }
+    }))).subscribe({
       next: () => {
         this.loadSalesData();
       },
