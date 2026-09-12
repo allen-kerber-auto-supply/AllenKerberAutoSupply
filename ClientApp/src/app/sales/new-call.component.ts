@@ -47,6 +47,10 @@ export class NewCallComponent implements OnChanges {
     return this.assignedRepEmails(this.findCustomer(this.newCall.accountName)).length > 0;
   }
 
+  get hasInvalidCallTiming(): boolean {
+    return !!this.validateCallTiming();
+  }
+
   isAssignedSalesCustomer(accountName: string): boolean {
     return this.assignedRepEmails(this.findCustomer(accountName)).length > 0;
   }

@@ -18,24 +18,24 @@
       <div class="form-grid-2">
         <label>Call Time
           <div class="time-parts">
-            <input type="number" [(ngModel)]="callTimeHours" name="callTimeHours" min="0" max="23" step="1" required>
+            <input type="number" [(ngModel)]="callTimeHours" name="callTimeHours" min="0" max="23" step="1" required aria-label="Call time hours">
             <span>:</span>
-            <input type="number" [(ngModel)]="callTimeMinutes" name="callTimeMinutes" min="0" max="59" step="1" required>
+            <input type="number" [(ngModel)]="callTimeMinutes" name="callTimeMinutes" min="0" max="59" step="1" required aria-label="Call time minutes">
           </div>
           <small class="input-hint">Use 0–23 hours and 0–59 minutes.</small>
         </label>
         <label>Call Duration
           <div class="time-parts">
-            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required>
+            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required aria-label="Call duration hours">
             <span>:</span>
-            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required>
+            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required aria-label="Call duration minutes">
           </div>
           <small class="input-hint">Duration cannot exceed 8:00.</small>
         </label>
       </div>
       <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>
       <div class="form-grid-2"><label>Status<select [(ngModel)]="newCall.status" name="status"><option [ngValue]="1">Completed</option><option [ngValue]="0">Scheduled / Open</option></select></label><label>Follow-up Date (Optional)<input type="date" [(ngModel)]="newCall.followUpDate" name="followUpDate"><small *ngIf="newCall.followUpDate" class="input-hint">Automatically schedules a follow-up call on this date</small></label></div>
-      <div class="form-actions"><button class="button secondary" type="button" (click)="resetNewCallForm()">Clear Form</button><button class="button primary" type="submit" [disabled]="savingCall || !newCall.accountName.trim()">{{savingCall ? 'Saving...' : 'Save Call Record'}}</button></div>
+      <div class="form-actions"><button class="button secondary" type="button" (click)="resetNewCallForm()">Clear Form</button><button class="button primary" type="submit" [disabled]="savingCall || !newCall.accountName.trim() || hasInvalidCallTiming">{{savingCall ? 'Saving...' : 'Save Call Record'}}</button></div>
       <p *ngIf="callErrorMessage" class="alert">{{callErrorMessage}}</p>
     </form>
   </div>
