@@ -508,7 +508,7 @@ export class AppComponent implements OnInit {
       ...call,
       phone: call.contactPhone || call.phone || '',
       repEmail: call.salesRepEmail || call.repEmail || '',
-      callDate: call.callDate ? call.callDate.slice(0, 10) : toDateInputValue(new Date()),
+      callDate: call.callDate || `${toDateInputValue(new Date())}T00:00:00`,
       followUpDate: call.followUpDate ? call.followUpDate.slice(0, 10) : ''
     };
   }
