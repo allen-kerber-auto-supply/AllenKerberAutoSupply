@@ -14,24 +14,24 @@
         </div>
       </div>
       <div class="form-grid-2"><label>Contact Name<input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person"></label><label>Phone Number<input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000"></label></div>
-      <div class="form-grid-2"><label>Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label><label>Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label></div>
-      <div class="form-grid-2">
-        <label>Call Time
-          <div class="time-parts">
-            <input type="number" [(ngModel)]="callTimeHours" name="callTimeHours" min="0" max="23" step="1" required aria-label="Call time hours">
-            <span>:</span>
-            <input type="number" [(ngModel)]="callTimeMinutes" name="callTimeMinutes" min="0" max="59" step="1" required aria-label="Call time minutes">
-          </div>
-          <small class="input-hint">Use 0–23 hours and 0–59 minutes.</small>
+      <div class="form-grid-2 call-timing-grid">
+        <label class="call-date-field">Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
+        <label class="call-time-field">Call Time *
+          <input type="time" [(ngModel)]="callTime" name="callTime" required step="60" #callTimeModel="ngModel" aria-label="Call time">
+          <small *ngIf="callTimeValidationMessage && (callTimeModel.dirty || callTimeModel.touched)" class="input-error">{{callTimeValidationMessage}}</small>
         </label>
-        <label>Call Duration
+        <label class="call-duration-field">Call Duration
           <div class="time-parts">
-            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required aria-label="Call duration hours">
+            <input type="number" [(ngModel)]="durationHours" name="durationHours" min="0" max="8" step="1" required #durationHoursModel="ngModel" aria-label="Call duration hours">
             <span>:</span>
-            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required aria-label="Call duration minutes">
+            <input type="number" [(ngModel)]="durationMinutes" name="durationMinutes" min="0" max="59" step="1" required #durationMinutesModel="ngModel" aria-label="Call duration minutes">
           </div>
+          <small *ngIf="durationHoursValidationMessage && (durationHoursModel.dirty || durationHoursModel.touched)" class="input-error">{{durationHoursValidationMessage}}</small>
+          <small *ngIf="durationMinutesValidationMessage && (durationMinutesModel.dirty || durationMinutesModel.touched)" class="input-error">{{durationMinutesValidationMessage}}</small>
+          <small *ngIf="durationLimitValidationMessage && (durationHoursModel.dirty || durationHoursModel.touched || durationMinutesModel.dirty || durationMinutesModel.touched)" class="input-error">{{durationLimitValidationMessage}}</small>
           <small class="input-hint">Duration cannot exceed 8:00.</small>
         </label>
+        <label class="sales-rep-field">Sales Rep *<select [(ngModel)]="newCall.repEmail" name="repEmail" required [disabled]="selectedCustomerHasAssignedRep || (!isAdmin && reps.length > 0)"><option *ngFor="let rep of reps" [value]="rep.repEmail || rep.email">{{rep.repName || rep.name || rep.repEmail || rep.email}} ({{rep.repEmail || rep.email}})</option></select></label>
       </div>
       <label>Call Notes / Discussion<textarea [(ngModel)]="newCall.comments" name="comments" rows="4" placeholder="Enter conversation details, parts discussed, quote details, etc."></textarea></label>
       <div class="form-grid-2"><label>Status<select [(ngModel)]="newCall.status" name="status"><option [ngValue]="1">Completed</option><option [ngValue]="0">Scheduled / Open</option></select></label><label>Follow-up Date (Optional)<input type="date" [(ngModel)]="newCall.followUpDate" name="followUpDate"><small *ngIf="newCall.followUpDate" class="input-hint">Automatically schedules a follow-up call on this date</small></label></div>
