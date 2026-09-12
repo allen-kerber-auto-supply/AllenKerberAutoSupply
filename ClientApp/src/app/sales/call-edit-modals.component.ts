@@ -27,6 +27,7 @@ export class CallEditModalsComponent implements OnChanges {
   editCallTime = '00:00';
   durationHours = 0;
   durationMinutes = 0;
+  private callDateTimeSuffix = '';
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['editingCall']) {
@@ -63,6 +64,7 @@ export class CallEditModalsComponent implements OnChanges {
     const parsedCallDateTime = this.parseCallDateTime(this.editingCall.callDate);
     this.editCallDate = parsedCallDateTime?.date || new Date().toISOString().slice(0, 10);
     this.editCallTime = parsedCallDateTime?.time || '00:00';
+    this.callDateTimeSuffix = parsedCallDateTime?.suffix || '';
 
     const duration = Number.isFinite(this.editingCall.callDuration) && (this.editingCall.callDuration ?? 0) > 0
       ? Number(this.editingCall.callDuration)
@@ -76,7 +78,7 @@ export class CallEditModalsComponent implements OnChanges {
     const time = this.parseCallTime(this.editCallTime) || '00:00';
     this.editingCallChange.emit({
       ...this.editingCall,
-      callDate: `${this.editCallDate}T${time}:00`
+      callDate: `${this.editCallDate}T${time}:00${this.callDateTimeSuffix}`
     });
   }
 
@@ -99,12 +101,13 @@ export class CallEditModalsComponent implements OnChanges {
     return Math.trunc(numericValue);
   }
 
-  private parseCallDateTime(value?: string): { date: string; time: string } | null {
-    const match = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/.exec(value || '');
+  private parseCallDateTime(value?: string): { date: string; time: string; suffix: string } | null {
+    const match = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})?)?/.exec(value || '');
     if (!match) return null;
     const date = match[1];
     const time = match[2] && match[3] ? `${match[2]}:${match[3]}` : '00:00';
-    return { date, time };
+    const suffix = match[4] || '';
+    return { date, time, suffix };
   }
 
   private parseCallTime(value: string): string | null {
