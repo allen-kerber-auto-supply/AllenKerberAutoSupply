@@ -183,7 +183,7 @@ export class NewCallComponent implements OnChanges {
   }
 
   private parseCallTime(): { hours: number; minutes: number; seconds: number; } | null {
-    const match = this.callTime.match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+    const match = this.callTime.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
     if (!match) {
       return null;
     }
