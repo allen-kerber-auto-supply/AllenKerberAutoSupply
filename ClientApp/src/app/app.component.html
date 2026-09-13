@@ -171,6 +171,7 @@
 
   <app-invoice-email-modal
     *ngIf="emailModalOpen"
+    [theme]="theme"
     [groups]="emailGroups"
     [error]="emailError"
     [results]="emailResults"

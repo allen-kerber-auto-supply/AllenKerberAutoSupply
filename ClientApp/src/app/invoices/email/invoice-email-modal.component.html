@@ -1,4 +1,4 @@
-<div class="modal-backdrop">
+<div class="modal-backdrop" [class.dark-theme]="theme === 'dark'">
   <div class="card modal email-modal">
     <p class="eyebrow">Email Invoices</p><h2>Send Selected Invoices</h2>
     <section *ngIf="!groups.length" class="muted-note">No invoices selected.</section>

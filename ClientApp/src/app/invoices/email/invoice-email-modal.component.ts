@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EmailGroup, InvoiceEmailResult } from '../../shared/models';
+import { EmailGroup, InvoiceEmailResult, Theme } from '../../shared/models';
 
 @Component({
   selector: 'app-invoice-email-modal',
@@ -11,6 +11,7 @@ import { EmailGroup, InvoiceEmailResult } from '../../shared/models';
   styleUrl: './invoice-email-modal.component.css'
 })
 export class InvoiceEmailModalComponent {
+  @Input() theme: Theme = 'light';
   @Input() groups: EmailGroup[] = [];
   @Input() error = '';
   @Input() results: InvoiceEmailResult[] | null = null;
