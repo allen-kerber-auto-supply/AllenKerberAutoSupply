@@ -613,12 +613,12 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
         var start = Timestamp.FromDateTime(DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Utc));
-        var end = Timestamp.FromDateTime(DateTime.SpecifyKind(toDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc));
+        var requestedEnd = DateTime.SpecifyKind(toDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
 
         var query = firestore.Collection("sales_calls")
-            .WhereEqualTo(nameof(SalesCall.Status), 1)
+            .WhereIn(nameof(SalesCall.Status), new[] { 1, 3 })
             .WhereGreaterThanOrEqualTo(nameof(SalesCall.CallDate), start)
-            .WhereLessThanOrEqualTo(nameof(SalesCall.CallDate), end);
+            .WhereLessThanOrEqualTo(nameof(SalesCall.CallDate), requestedEnd);
         if (!string.IsNullOrWhiteSpace(email))
         {
             query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
@@ -656,28 +656,32 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     public async Task<IReadOnlyList<SalesCall>> GetUpComingCallRecordsAsync(string salesRepEmail, DateTime currentDateTime, DateTime fromDate, CancellationToken cancellationToken = default)
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
-        var endOfFromDate = Timestamp.FromDateTime(DateTime.SpecifyKind(fromDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc));
-
-        var callDateQuery = firestore.Collection("sales_calls")
-            .WhereEqualTo(nameof(SalesCall.Status), 0)
-            .WhereLessThanOrEqualTo(nameof(SalesCall.CallDate), endOfFromDate);
-        var followUpDateQuery = firestore.Collection("sales_calls")
-            .WhereEqualTo(nameof(SalesCall.Status), 0)
-            .WhereLessThanOrEqualTo(nameof(SalesCall.FollowUpDate), endOfFromDate);
+        var query = firestore.Collection("sales_calls")
+            .WhereIn(nameof(SalesCall.Status), new[] { 0, 2 })
+            .WhereGreaterThan(nameof(SalesCall.CallDate), Timestamp.FromDateTime(DateTime.SpecifyKind(currentDateTime, DateTimeKind.Utc)));
         if (!string.IsNullOrWhiteSpace(email))
         {
-            callDateQuery = callDateQuery.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
-            followUpDateQuery = followUpDateQuery.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
+            query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);
         }
 
-        var callDateSnapshot = await callDateQuery.GetSnapshotAsync(cancellationToken);
-        var followUpDateSnapshot = await followUpDateQuery.GetSnapshotAsync(cancellationToken);
-        var calls = callDateSnapshot.Documents
-            .Concat(followUpDateSnapshot.Documents)
-            .GroupBy(document => document.Id)
-            .Select(group => MapSalesCall(group.First()))
-            .OrderBy(c => c.CallDate ?? c.FollowUpDate)
+        var snapshot = await query.GetSnapshotAsync(cancellationToken);
+        var calls = snapshot.Documents
+            .Select(MapSalesCall)
+            .OrderBy(c => c.CallDate)
             .ToList();
+
+        var reps = (await firestore.Collection("sales_reps").GetSnapshotAsync(cancellationToken))
+            .Documents
+            .Select(MapSalesRep)
+            .ToList();
+        foreach (var call in calls)
+        {
+            var rep = reps.FirstOrDefault(r =>
+                (!string.IsNullOrWhiteSpace(call.SalesRepEmail) &&
+                 string.Equals(r.RepEmail, call.SalesRepEmail, StringComparison.OrdinalIgnoreCase)) ||
+                (call.SalesRepId != 0 && r.Id == call.SalesRepId));
+            call.RepName = rep?.RepName ?? string.Empty;
+        }
 
         return await ApplyCustomerStatusAsync(calls, cancellationToken);
     }
@@ -717,7 +721,8 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
 
-        Query query = firestore.Collection("sales_calls");
+        Query query = firestore.Collection("sales_calls")
+            .WhereIn(nameof(SalesCall.Status), new[] { 1, 3 });
         if (!string.IsNullOrWhiteSpace(email))
         {
             query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);

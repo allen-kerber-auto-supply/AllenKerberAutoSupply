@@ -12,8 +12,8 @@
     </div>
     <div class="history-filters-grid">
       <div class="date-range" *ngIf="viewMode === 'records'">
-        <label>From Date <input type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="filtersChanged.emit()"></label>
-        <label>To Date <input type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="filtersChanged.emit()"></label>
+        <label>From Date <input type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="onDateRangeChanged()"></label>
+        <label>To Date <input type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="onDateRangeChanged()"></label>
       </div>
       <label>Account Search
         <div class="input-with-clear">
@@ -31,7 +31,7 @@
     <div *ngIf="!loading && calls.length" class="call-record-list">
       <article *ngFor="let call of calls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
         <div class="call-record-header"><div class="status-stack"><span class="status-badge" [class.completed]="call.status === 1" [class.scheduled]="call.status === 0">{{call.status === 1 ? 'Completed' : 'Scheduled'}}</span><span *ngIf="isProspect(call)" class="status-badge prospect">Prospect</span></div><h3>{{call.accountName}}</h3></div>
-        <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
+        <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy h:mm a'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
         <div class="call-record-actions"><button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); editRequested.emit(call)">Edit</button><button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button></div>
       </article>
     </div>
@@ -53,7 +53,7 @@
         <div *ngIf="selectedSummaryCalls.length" class="call-record-list">
           <article *ngFor="let call of selectedSummaryCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
             <div class="call-record-header"><div class="status-stack"><span class="status-badge" [class.completed]="call.status === 1" [class.scheduled]="call.status === 0">{{call.status === 1 ? 'Completed' : 'Scheduled'}}</span><span *ngIf="isProspect(call)" class="status-badge prospect">Prospect</span></div><h3>{{call.accountName}}</h3></div>
-            <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
+            <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{(call.callDate || call.createdDate) | date:'M/d/yyyy h:mm a'}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
             <div class="call-record-actions"><button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); editRequested.emit(call)">Edit</button><button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button></div>
           </article>
         </div>

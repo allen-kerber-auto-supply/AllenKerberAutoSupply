@@ -50,10 +50,16 @@
         [calls]="scheduledCalls"
         [loading]="loadingScheduledCalls"
         [isAdmin]="isSalesAdminView"
+        [dateFrom]="scheduledDateFrom"
+        [dateTo]="scheduledDateTo"
+        [accountFilter]="scheduledAccountFilter"
+        [accountOptions]="scheduledAccountOptions"
         (newCallRequested)="setSalesTab('new-call')"
         (callSelected)="openCallDetails($event)"
         (completeRequested)="openCompleteModal($event)"
-        (deleteRequested)="deleteCall($event)"></app-scheduled-calls>
+        (deleteRequested)="deleteCall($event)"
+        (accountFilterChange)="scheduledAccountFilter = $event"
+        (dateRangeChange)="onScheduledDateRangeChange($event)"></app-scheduled-calls>
 
       <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="handleNewCallSaved()"></app-new-call>
 
@@ -74,6 +80,7 @@
         [repDisplayName]="getRepDisplayName.bind(this)"
         (viewModeChange)="historyViewMode = $event"
         (filtersChanged)="loadCallHistory()"
+        (dateRangeChange)="onHistoryDateRangeChange($event)"
         (accountFilterChange)="historyAccountFilter = $event"
         (exportRequested)="exportHistoryCsv()"
         (printRequested)="printAccountList()"

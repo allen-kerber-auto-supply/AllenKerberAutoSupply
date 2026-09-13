@@ -29,6 +29,7 @@ export class SalesHistoryComponent {
 
   @Output() viewModeChange = new EventEmitter<HistoryViewMode>();
   @Output() filtersChanged = new EventEmitter<void>();
+  @Output() dateRangeChange = new EventEmitter<{ dateFrom: string; dateTo: string }>();
   @Output() accountFilterChange = new EventEmitter<string>();
   @Output() exportRequested = new EventEmitter<void>();
   @Output() printRequested = new EventEmitter<void>();
@@ -45,6 +46,11 @@ export class SalesHistoryComponent {
 
   onAccountFilterChanged(value: string) {
     this.accountFilterChange.emit(value);
+    this.filtersChanged.emit();
+  }
+
+  onDateRangeChanged() {
+    this.dateRangeChange.emit({ dateFrom: this.dateFrom, dateTo: this.dateTo });
     this.filtersChanged.emit();
   }
 

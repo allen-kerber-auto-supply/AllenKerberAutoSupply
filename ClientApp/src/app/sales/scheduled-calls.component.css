@@ -1,3 +1,31 @@
 :host {
   display: block;
 }
+
+.call-date-value {
+  white-space: nowrap;
+}
+
+.call-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+}
+
+.call-record-meta > span {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 150px;
+  gap: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.call-record-meta b {
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

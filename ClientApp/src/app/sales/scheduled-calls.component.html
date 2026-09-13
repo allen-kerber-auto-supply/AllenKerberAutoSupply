@@ -1,4 +1,19 @@
 <div class="sales-tab-content">
+  <div class="card history-filter-card">
+    <div class="history-filters-grid">
+      <div class="date-range">
+        <label>From Date <input type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="onDateRangeChanged()"></label>
+        <label>To Date <input type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="onDateRangeChanged()"></label>
+      </div>
+      <label>Account Search
+        <div class="input-with-clear">
+          <input [ngModel]="accountFilter" list="scheduledAccountOptions" placeholder="Filter by account name..." (ngModelChange)="onAccountFilterChanged($event)">
+          <button *ngIf="accountFilter" class="clear-btn" type="button" title="Clear account search" (click)="onAccountFilterChanged('')">&times;</button>
+        </div>
+        <datalist id="scheduledAccountOptions"><option *ngFor="let accountName of accountOptions" [value]="accountName"></option></datalist>
+      </label>
+    </div>
+  </div>
   <div class="card table">
     <div class="table-header-row">
       <div>
@@ -11,16 +26,16 @@
     </div>
     <div *ngIf="loading" class="state"><p>Loading scheduled calls...</p></div>
     <div *ngIf="!loading && calls.length" class="call-record-list">
-      <article *ngFor="let call of calls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+      <article *ngFor="let call of filteredCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
         <div class="call-record-header">
           <div>
             <h3>{{call.accountName}}</h3>
             <p>{{call.contactName || 'No contact specified'}}</p>
           </div>
-          <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0">{{call.status===1 ? 'Completed' : 'Scheduled'}}</span>
+          <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0 || call.status===2">{{call.status===1 ? 'Completed' : call.status===2 ? 'Rescheduled' : 'Scheduled'}}</span>
         </div>
         <div class="call-record-meta">
-          <span><b>Call date</b> {{(call.callDate || call.createdDate) | date:'M/d/yyyy'}}</span>
+          <span class="call-date-value"><b>Call date</b> {{(call.callDate || call.createdDate) | date:'M/d/yyyy h:mm a'}}</span>
           <span *ngIf="call.followUpDate"><b>Follow-up</b> {{call.followUpDate | date:'M/d/yyyy'}}</span>
           <span><b>Rep</b> {{call.repName || call.salesRepEmail || call.repEmail || 'Unassigned'}}</span>
         </div>
@@ -31,7 +46,7 @@
         </div>
       </article>
     </div>
-    <div *ngIf="!loading && !calls.length" class="state">
+    <div *ngIf="!loading && !filteredCalls.length" class="state">
       <p>No scheduled calls found for the selected filter.</p>
       <button class="button primary" type="button" (click)="newCallRequested.emit()">Log a Call</button>
     </div>

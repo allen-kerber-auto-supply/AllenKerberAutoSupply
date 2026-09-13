@@ -58,6 +58,10 @@ export class AppComponent implements OnInit {
   adminRepFilter = '';
   selectedSalesFilterRep = '';
   scheduledCalls: SalesCall[] = [];
+  scheduledDateFrom = toDateInputValue(new Date());
+  scheduledDateTo = '';
+  scheduledAccountFilter = '';
+  scheduledAccountOptions: string[] = [];
   loadingScheduledCalls = false;
   callHistory: SalesCall[] = [];
   filteredCallHistory: SalesCall[] = [];
@@ -427,10 +431,11 @@ export class AppComponent implements OnInit {
   loadScheduledCalls() {
     this.loadingScheduledCalls = true;
     const params: Record<string, string> = {};
-    if (this.selectedSalesFilterRep) params['repEmail'] = this.selectedSalesFilterRep;
+    if (this.selectedSalesFilterRep) params['salesRepEmail'] = this.selectedSalesFilterRep;
     this.salesService.getUpcomingCalls(params).subscribe({
       next: calls => {
         this.scheduledCalls = calls || [];
+        this.scheduledAccountOptions = [...new Set(this.scheduledCalls.map(c => (c.accountName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         this.loadingScheduledCalls = false;
       },
       error: () => {
@@ -594,6 +599,16 @@ export class AppComponent implements OnInit {
         }
       });
     }
+  }
+
+  onScheduledDateRangeChange(range: { dateFrom: string; dateTo: string }) {
+    this.scheduledDateFrom = range.dateFrom;
+    this.scheduledDateTo = range.dateTo;
+  }
+
+  onHistoryDateRangeChange(range: { dateFrom: string; dateTo: string }) {
+    this.historyDateFrom = range.dateFrom;
+    this.historyDateTo = range.dateTo;
   }
 
   onHistoryAccountSearchChange() {
