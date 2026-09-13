@@ -413,6 +413,17 @@ export class AppComponent implements OnInit {
     }
   }
 
+  handleNewCallSaved() {
+    this.loadScheduledCalls();
+    this.setSalesTab('history');
+    this.callSuccessMessage = 'Call saved successfully!';
+    if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
+    this.callSuccessToastTimer = window.setTimeout(() => {
+      this.callSuccessMessage = '';
+      this.callSuccessToastTimer = null;
+    }, 4000);
+  }
+
   loadScheduledCalls() {
     this.loadingScheduledCalls = true;
     const params: Record<string, string> = {};

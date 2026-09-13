@@ -55,7 +55,7 @@
         (completeRequested)="openCompleteModal($event)"
         (deleteRequested)="deleteCall($event)"></app-scheduled-calls>
 
-      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="loadScheduledCalls()"></app-new-call>
+      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="handleNewCallSaved()"></app-new-call>
 
       <app-sales-history
         *ngIf="salesTab==='history'"
