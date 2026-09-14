@@ -27,10 +27,12 @@ export class InvoiceSearchComponent {
   dateTo = this.dateValue(0);
   today = this.dateValue(0);
   searchPerformed = false;
+  searchedCustomerName = '';
   invoices: Invoice[] = [];
   selectedInvoiceKeys = new Set<string>();
   error = '';
   showCustomerColumns = true;
+  showCustomerNameColumn = true;
   invoiceSortKey: InvoiceSortKey = 'invoiceDate';
   invoiceSortDirection: 'asc' | 'desc' = 'desc';
   private searchPage = 0;
@@ -43,7 +45,9 @@ export class InvoiceSearchComponent {
     this.searchPerformed = true;
     const invoiceNumber = this.invoiceNumber.trim();
     const customerName = this.customerName.trim();
-    this.showCustomerColumns = !customerName || !!invoiceNumber;
+    this.showCustomerColumns = !!customerName || !!invoiceNumber;
+    this.showCustomerNameColumn = !customerName;
+    this.searchedCustomerName = '';
 
     if (invoiceNumber) {
       this.customerName = '';
@@ -56,6 +60,7 @@ export class InvoiceSearchComponent {
       this.error = 'Select a valid customer from the suggestions.';
       return;
     }
+    this.searchedCustomerName = customerName;
     if (!this.dateFrom || !this.dateTo) {
       this.error = 'Select a date range to search by customer name.';
       return;
