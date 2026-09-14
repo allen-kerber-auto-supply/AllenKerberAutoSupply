@@ -129,6 +129,7 @@ export class AppComponent implements OnInit {
   // Viewer state
   isViewer = false;
   viewerInvoiceNumber = '';
+  viewerInvoices: Invoice[] = [];
   viewerStoreNumber = 0;
   viewerCustomer = '';
   viewerCustNo = '';
@@ -158,6 +159,11 @@ export class AppComponent implements OnInit {
     if (pathname.includes('invoice-view') || params.has('invoice')) {
       this.isViewer = true;
       this.viewerInvoiceNumber = (params.get('invoice') || '').trim();
+      try {
+        this.viewerInvoices = JSON.parse(params.get('invoices') || '[]') as Invoice[];
+      } catch {
+        this.viewerInvoices = [];
+      }
       this.viewerStoreNumber = parseInt(params.get('store') || '0', 10);
       this.viewerCustomer = params.get('customer') || '';
       this.viewerCustNo = params.get('custNo') || '';
@@ -204,6 +210,19 @@ export class AppComponent implements OnInit {
     if (invoice.customerName) params.set('customer', invoice.customerName);
     if (invoice.customerNumber) params.set('custNo', String(invoice.customerNumber));
 
+    window.open(`/invoice-view?${params.toString()}`, '_blank');
+  }
+
+  printInvoices(invoices: Invoice[]) {
+    if (!invoices.length) return;
+    const params = new URLSearchParams();
+    params.set('invoice', (invoices[0].invoiceNumber || '').trim());
+    params.set('invoices', JSON.stringify(invoices.map(invoice => ({
+      invoiceNumber: invoice.invoiceNumber,
+      storeNumber: invoice.storeNumber || 0,
+      customerNumber: invoice.customerNumber || 0,
+      customerName: invoice.customerName || ''
+    }))));
     window.open(`/invoice-view?${params.toString()}`, '_blank');
   }
 

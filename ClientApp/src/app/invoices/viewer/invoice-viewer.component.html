@@ -1,16 +1,17 @@
 <div class="viewer-layout" [class.dark-theme]="theme === 'dark'">
   <header class="viewer-toolbar">
     <div class="viewer-toolbar-info">
-      <h1 class="viewer-toolbar-title">Invoice #{{invoiceNumber}}</h1>
+      <h1 class="viewer-toolbar-title">{{invoices.length > 1 ? 'Selected Invoices' : 'Invoice #' + invoiceNumber}}</h1>
       <p class="viewer-toolbar-meta">
         <span *ngIf="customer">{{customer}}</span>
         <span *ngIf="customerNumber"> (#{{customerNumber}})</span>
         <span *ngIf="customer || customerNumber"> &bull; </span>
-        <span>{{pages.length}} page{{pages.length === 1 ? '' : 's'}}</span>
+        <span *ngIf="invoices.length === 1">{{invoiceViews[0]?.pages?.length || 0}} page{{invoiceViews[0]?.pages?.length === 1 ? '' : 's'}}</span>
+        <span *ngIf="invoices.length > 1">{{invoices.length}} invoices</span>
       </p>
     </div>
     <div class="viewer-toolbar-actions">
-      <button class="button primary email-btn" type="button" (click)="requestEmail()">Email</button>
+      <button *ngIf="invoices.length === 1" class="button primary email-btn" type="button" (click)="requestEmail()">Email</button>
       <button class="button primary print-btn" type="button" (click)="print()">Print (Ctrl+P)</button>
       <button class="button secondary" type="button" (click)="close()">Close</button>
     </div>
@@ -18,7 +19,7 @@
 
   <div *ngIf="loading" class="viewer-loading">
     <div class="spinner"></div>
-    <p class="viewer-loading-title">Loading Invoice #{{invoiceNumber}}...</p>
+    <p class="viewer-loading-title">Loading invoice images...</p>
     <p class="viewer-loading-note">Retrieving invoice images...</p>
   </div>
 
@@ -32,22 +33,24 @@
   </div>
 
   <main *ngIf="!loading && !error" class="viewer-container">
-    <div *ngFor="let page of pages" class="viewer-card">
+    <ng-container *ngFor="let view of invoiceViews">
+    <div *ngFor="let page of view.pages" class="viewer-card">
       <div class="viewer-page-header">
-        <span>Invoice #{{invoiceNumber}} <ng-container *ngIf="customer">&bull; {{customer}}</ng-container></span>
-        <span>Page {{page.pageIndex}} of {{pages.length}}</span>
+        <span>Invoice #{{view.invoice.invoiceNumber}} <ng-container *ngIf="view.invoice.customerName">&bull; {{view.invoice.customerName}}</ng-container></span>
+        <span>Page {{page.pageIndex}} of {{view.pages.length}}</span>
       </div>
       <div class="viewer-page-body">
         <div *ngIf="page.loading" class="page-spinner-wrap">
           <div class="spinner small"></div>
           <p class="viewer-page-loading">Loading page {{page.pageIndex}}...</p>
         </div>
-        <img *ngIf="page.blobUrl && !page.error" class="viewer-page-img" [src]="page.blobUrl" [alt]="'Invoice ' + invoiceNumber + ' Page ' + page.pageIndex" />
+        <img *ngIf="page.blobUrl && !page.error" class="viewer-page-img" [src]="page.blobUrl" [alt]="'Invoice ' + view.invoice.invoiceNumber + ' Page ' + page.pageIndex" />
         <div *ngIf="page.error" class="error-box">
           <p class="viewer-page-error">{{page.errorMessage || 'No image available for page ' + page.pageIndex + '.'}}</p>
-          <button class="button secondary" type="button" (click)="retryPage(page)">Retry</button>
+          <button class="button secondary" type="button" (click)="retryPage(view, page)">Retry</button>
         </div>
       </div>
     </div>
+    </ng-container>
   </main>
 </div>

@@ -16,72 +16,52 @@ export class InvoiceViewerComponent implements OnInit, OnDestroy {
   private readonly invoiceImageService = inject(InvoiceImageService);
 
   @Input() invoiceNumber = '';
+  @Input() invoices: Invoice[] = [];
   @Input() storeNumber = 0;
   @Input() customer = '';
   @Input() customerNumber = '';
   @Input() theme: Theme = 'light';
   @Output() emailRequested = new EventEmitter<Invoice>();
 
+  invoiceViews: Array<{ invoice: Invoice; pages: ViewerPage[]; loading: boolean; error: string }> = [];
   pages: ViewerPage[] = [];
   loading = false;
   error = '';
 
   ngOnInit() {
+    if (!this.invoices.length && this.invoiceNumber) {
+      this.invoices = [{ invoiceNumber: this.invoiceNumber, storeNumber: this.storeNumber, customerNumber: this.customerNumber, customerName: this.customer, invoiceAmount: 0 }];
+    }
+    if (this.invoices.length) {
+      const first = this.invoices[0];
+      this.invoiceNumber = first.invoiceNumber;
+      this.storeNumber = first.storeNumber || this.storeNumber;
+      this.customer = first.customerName || this.customer;
+      this.customerNumber = first.customerNumber ? String(first.customerNumber) : this.customerNumber;
+    }
     if (this.invoiceNumber) {
-      document.title = `Invoice ${this.invoiceNumber} - Allen & Kerber Auto Supply`;
+      document.title = this.invoices.length > 1 ? 'Invoice Print - Allen & Kerber Auto Supply' : `Invoice ${this.invoiceNumber} - Allen & Kerber Auto Supply`;
       this.load();
     }
   }
 
   ngOnDestroy() {
-    for (const page of this.pages) {
-      if (page.blobUrl) URL.revokeObjectURL(page.blobUrl);
+    for (const view of this.invoiceViews) {
+      for (const page of view.pages) {
+        if (page.blobUrl) URL.revokeObjectURL(page.blobUrl);
+      }
     }
   }
 
   load() {
     this.loading = true;
     this.error = '';
-    if (!this.customer || !this.customerNumber) {
-      this.invoiceService.getByNumber(this.invoiceNumber).subscribe({
-        next: result => this.applyInvoiceDetails(result.items),
-        error: () => {}
-      });
-    }
-
-    this.invoiceImageService.lookup(this.invoiceNumber, this.storeNumber).subscribe({
-      next: lookup => {
-        this.loading = false;
-        if (lookup.storeNumber) this.storeNumber = lookup.storeNumber;
-        const pageIndices = lookup.pages?.length
-          ? lookup.pages.map(page => page.pageIndex).sort((a, b) => a - b)
-          : Array.from({ length: lookup.totalPages || 1 }, (_, index) => index + 1);
-        this.pages = pageIndices.map(pageIndex => ({
-          pageIndex,
-          url: this.invoiceImageService.pageUrl(this.invoiceNumber, this.storeNumber, pageIndex),
-          loaded: false,
-          loading: false,
-          error: false
-        }));
-        for (const page of this.pages) this.loadPage(page);
-      },
-      error: () => {
-        this.loading = false;
-        const page: ViewerPage = {
-          pageIndex: 1,
-          url: this.invoiceImageService.pageUrl(this.invoiceNumber, this.storeNumber, 1),
-          loaded: false,
-          loading: false,
-          error: false
-        };
-        this.pages = [page];
-        this.loadPage(page);
-      }
-    });
+    this.invoiceViews = this.invoices.map(invoice => ({ invoice, pages: [], loading: true, error: '' }));
+    for (const view of this.invoiceViews) this.loadInvoice(view);
   }
 
-  retryPage(page: ViewerPage) {
-    page.url = this.invoiceImageService.pageUrl(this.invoiceNumber, this.storeNumber, page.pageIndex, Date.now());
+  retryPage(view: { invoice: Invoice; pages: ViewerPage[]; loading: boolean; error: string }, page: ViewerPage) {
+    page.url = this.invoiceImageService.pageUrl(view.invoice.invoiceNumber, view.invoice.storeNumber || 0, page.pageIndex, Date.now());
     this.loadPage(page);
   }
 
@@ -144,6 +124,27 @@ export class InvoiceViewerComponent implements OnInit, OnDestroy {
           : error.status === 404
             ? `No image available for page ${page.pageIndex}.`
             : `Failed to load page ${page.pageIndex} (${error.status || 'network error'}).`;
+      }
+    });
+  }
+
+  private loadInvoice(view: { invoice: Invoice; pages: ViewerPage[]; loading: boolean; error: string }) {
+    const invoice = view.invoice;
+    this.invoiceImageService.lookup(invoice.invoiceNumber, invoice.storeNumber || 0).subscribe({
+      next: lookup => {
+        if (lookup.storeNumber) invoice.storeNumber = lookup.storeNumber;
+        const pageIndices = lookup.pages?.length
+          ? lookup.pages.map(page => page.pageIndex).sort((a, b) => a - b)
+          : Array.from({ length: lookup.totalPages || 1 }, (_, index) => index + 1);
+        view.pages = pageIndices.map(pageIndex => ({ pageIndex, url: this.invoiceImageService.pageUrl(invoice.invoiceNumber, invoice.storeNumber || 0, pageIndex), loaded: false, loading: false, error: false }));
+        view.loading = false;
+        for (const page of view.pages) this.loadPage(page);
+        this.loading = this.invoiceViews.some(item => item.loading);
+      },
+      error: () => {
+        view.loading = false;
+        view.error = 'Unable to load invoice images.';
+        this.loading = this.invoiceViews.some(item => item.loading);
       }
     });
   }

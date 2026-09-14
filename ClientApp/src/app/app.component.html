@@ -1,5 +1,6 @@
   <app-invoice-viewer
     *ngIf="isViewer"
+    [invoices]="viewerInvoices"
     [invoiceNumber]="viewerInvoiceNumber"
     [storeNumber]="viewerStoreNumber"
     [customer]="viewerCustomer"
@@ -140,7 +141,7 @@
       (convertRequested)="convertProspectToCustomer()"
       (editRequested)="openEditCall($event); closeCallDetails()"></app-call-details>
 
-    <app-invoice-search *ngIf="authenticated && destination==='invoice'" [customers]="allCustomers" (uploadRequested)="go('invoice-upload')" (emailRequested)="openEmailModalForInvoices($event)" (invoiceSelected)="viewInvoice($event)"></app-invoice-search>
+    <app-invoice-search *ngIf="authenticated && destination==='invoice'" [customers]="allCustomers" (uploadRequested)="go('invoice-upload')" (emailRequested)="openEmailModalForInvoices($event)" (printRequested)="printInvoices($event)" (invoiceSelected)="viewInvoice($event)"></app-invoice-search>
 
     <app-invoice-upload *ngIf="authenticated && destination==='invoice-upload'" (backRequested)="go('invoice')"></app-invoice-upload>
     <app-user-admin

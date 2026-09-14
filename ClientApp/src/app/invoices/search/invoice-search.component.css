@@ -1,5 +1,7 @@
 .lookup-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
+.table-header-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
 .invoice-search-col .lookup {
 	gap: .75rem;
 	padding: 1.15rem;

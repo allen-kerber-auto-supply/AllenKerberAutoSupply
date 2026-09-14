@@ -19,6 +19,7 @@ export class InvoiceSearchComponent {
   @Input() customers: CustomerSummary[] = [];
   @Output() uploadRequested = new EventEmitter<void>();
   @Output() emailRequested = new EventEmitter<Invoice[]>();
+  @Output() printRequested = new EventEmitter<Invoice[]>();
   @Output() invoiceSelected = new EventEmitter<Invoice>();
 
   invoiceNumber = '';
