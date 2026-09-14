@@ -21,6 +21,7 @@ import { SalesAdminComponent } from './sales/sales-admin.component';
 import { CallEditModalsComponent } from './sales/call-edit-modals.component';
 import { NewCallComponent } from './sales/new-call.component';
 import { UserAdminComponent } from './admin/user-admin.component';
+import { CustomerAdminComponent } from './admin/customer-admin.component';
 import { AppHeaderComponent } from './shell/app-header.component';
 import {
   AccountSummary,
@@ -39,14 +40,14 @@ import {
 function toDateInputValue(date: Date): string { return date.toISOString().slice(0, 10); }
 
 @Component({
-  selector: 'app-root', standalone: true, imports: [CommonModule, LoginComponent, PasswordChangeComponent, AccessDeniedComponent, WorkspaceChooserComponent, InvoiceViewerComponent, InvoiceSearchComponent, InvoiceUploadComponent, InvoiceEmailModalComponent, SalesNavigationComponent, ScheduledCallsComponent, CallDetailsComponent, SalesHistoryComponent, SalesAdminComponent, CallEditModalsComponent, NewCallComponent, UserAdminComponent, AppHeaderComponent],
+  selector: 'app-root', standalone: true, imports: [CommonModule, LoginComponent, PasswordChangeComponent, AccessDeniedComponent, WorkspaceChooserComponent, InvoiceViewerComponent, InvoiceSearchComponent, InvoiceUploadComponent, InvoiceEmailModalComponent, SalesNavigationComponent, ScheduledCallsComponent, CallDetailsComponent, SalesHistoryComponent, SalesAdminComponent, CallEditModalsComponent, NewCallComponent, UserAdminComponent, CustomerAdminComponent, AppHeaderComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
   encapsulation: ViewEncapsulation.None,
 })
 export class AppComponent implements OnInit {
   private readonly http = inject(HttpClient); private readonly salesService = inject(SalesService); private readonly auth = inject(AuthService); private readonly themeService = inject(ThemeService);
-  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; allCustomers: CustomerSummary[] = []; error = ''; emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
+  authenticated = false; denied = location.pathname === '/access-denied'; signingOut = false; name = ''; currentUserEmail = ''; roles: string[] = []; hasDualRoles = false; canManageUsers = false; canManageCustomers = false; mustChangePassword = false; destination: Destination = null; previousWorkspace: Destination = 'choose'; allCustomers: CustomerSummary[] = []; error = ''; emailModalOpen = false; emailGroups: EmailGroup[] = []; sendingEmails = false; emailResults: InvoiceEmailResult[] | null = null; emailError = ''; theme: Theme = this.initialTheme(); users: UserAccount[] = []; loadingUsers = false; usersError = ''; resettingUser: UserAccount | null = null; resetPasswordValue = ''; editingRolesUser: UserAccount | null = null; editingRoles: string[] = []; deletingUser: UserAccount | null = null; adminMessage = ''; adminError = false; roleOptions = ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser', 'SalesAdmin', 'SalesUser']; newUser = { displayName: '', email: '', temporaryPassword: this.generateTempPassword(), roles: [] as string[] };
 
   // Sales state
   salesTab: 'scheduled' | 'new-call' | 'history' | 'admin' = 'scheduled';
@@ -165,8 +166,8 @@ export class AppComponent implements OnInit {
 
   initialTheme(): Theme { return this.themeService.getInitialTheme(); }
   toggleTheme() { this.theme = this.themeService.toggle(this.theme); }
-  setDestination() { const sales = this.roles.includes('SalesAdmin') || this.roles.includes('SalesUser'); const invoice = this.roles.some(role => ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser'].includes(role)); this.hasDualRoles = sales && invoice; this.canManageUsers = this.roles.some(role => ['InvoiceAdmin', 'SalesAdmin'].includes(role)); this.destination = this.mustChangePassword ? 'password-change' : this.hasDualRoles ? 'choose' : sales ? 'sales' : invoice ? 'invoice' : null; this.denied = this.destination === null; }
-  go(destination: Destination) { if (this.destination !== 'admin') this.previousWorkspace = this.destination; this.destination = destination; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') this.loadCustomers(); if (destination === 'sales') this.loadSalesData(); }
+  setDestination() { const sales = this.roles.includes('SalesAdmin') || this.roles.includes('SalesUser'); const invoice = this.roles.some(role => ['InvoiceAdmin', 'InvoiceUser', 'CustomerInvoiceUser'].includes(role)); this.hasDualRoles = sales && invoice; this.canManageUsers = this.roles.some(role => ['InvoiceAdmin', 'SalesAdmin'].includes(role)); this.canManageCustomers = this.roles.includes('InvoiceAdmin'); this.destination = this.mustChangePassword ? 'password-change' : this.hasDualRoles ? 'choose' : sales ? 'sales' : invoice ? 'invoice' : null; this.denied = this.destination === null; }
+  go(destination: Destination) { if (this.destination !== 'admin' && this.destination !== 'customer-admin') this.previousWorkspace = this.destination; this.destination = destination; this.error = ''; if (destination === 'admin') this.loadUsers(); if (destination === 'invoice') this.loadCustomers(); if (destination === 'sales') this.loadSalesData(); }
   switchView() { this.go(this.destination === 'sales' ? 'invoice' : 'sales'); }
   loadCustomers() {
     if (this.allCustomers.length > 0) return;

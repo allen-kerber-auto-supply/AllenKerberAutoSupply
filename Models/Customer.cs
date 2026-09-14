@@ -3,7 +3,7 @@ using Google.Cloud.Firestore;
 namespace AllenKerberAutoSupply.Models;
 
 [FirestoreData]
-public sealed class Customer
+public sealed class FirestoreCustomer
 {
     [FirestoreProperty] public int CustomerNumber { get; set; }
     [FirestoreProperty] public string CustomerName { get; set; } = string.Empty;

@@ -13,6 +13,7 @@ export class AppHeaderComponent {
   @Input() theme: Theme = 'light';
   @Input() authenticated = false;
   @Input() canManageUsers = false;
+  @Input() canManageCustomers = false;
   @Input() hasDualRoles = false;
   @Input() destination: Destination = null;
   @Input() name = '';
@@ -21,6 +22,7 @@ export class AppHeaderComponent {
 
   @Output() themeToggle = new EventEmitter<void>();
   @Output() adminRequested = new EventEmitter<void>();
+  @Output() customerAdminRequested = new EventEmitter<void>();
   @Output() switchRequested = new EventEmitter<void>();
   @Output() logoutRequested = new EventEmitter<void>();
 

@@ -1,0 +1,42 @@
+<section class="workspace customer-admin-workspace">
+  <div class="heading">
+    <div><p class="eyebrow">Invoice Administration</p><h1>Invoice Customers</h1><p>Maintain customer details used for invoices and statements.</p></div>
+    <button class="button secondary" type="button" (click)="startAdd()">Add Customer</button>
+  </div>
+
+  <div class="customer-admin-grid">
+    <div class="card customer-list-card">
+      <div class="customer-list-header"><div><p class="eyebrow">Customers</p><h2>Existing accounts</h2></div><span class="badge">{{customers.length}}</span></div>
+      <div class="customer-list-controls">
+        <label class="customer-filter">Filter customers<input [ngModel]="filterText" (ngModelChange)="updateFilter($event)" name="customerFilter" type="search" placeholder="Name, number, city, or vendor ID"></label>
+      </div>
+      <p *ngIf="loading" class="muted-state">Loading customers...</p>
+      <p *ngIf="!loading && error" class="notice alert">{{error}}</p>
+      <p *ngIf="!loading && !filteredCustomers.length" class="muted-state">{{customers.length ? 'No customers match this filter.' : 'No customers found.'}}</p>
+      <div *ngIf="!loading && filteredCustomers.length" class="customer-list-viewport" (scroll)="loadMoreCustomers($event)">
+        <div *ngFor="let customer of visibleCustomers; trackBy: trackCustomer" class="customer-admin-row" [class.active]="selectedCustomer?.customerNumber === customer.customerNumber" role="button" tabindex="0" (click)="startEdit(customer)" (keydown.enter)="startEdit(customer)" (keydown.space)="$event.preventDefault(); startEdit(customer)">
+          <div><b>{{customer.customerName}}</b><small>#{{customer.customerNumber}}<span *ngIf="customer.city"> · {{customer.city}}, {{customer.state}}</span></small></div>
+        </div>
+      </div>
+      <p *ngIf="filteredCustomers.length > visibleCustomers.length" class="list-count">Showing {{visibleCustomers.length}} of {{filteredCustomers.length}}</p>
+    </div>
+
+    <form *ngIf="selectedCustomer || isAdding" class="card customer-form" (ngSubmit)="save()">
+      <div><p class="eyebrow">{{selectedCustomer ? 'Edit account' : 'New account'}}</p><h2>{{selectedCustomer ? selectedCustomer.customerName : 'Add a customer'}}</h2></div>
+      <div class="form-grid-2">
+        <label>Customer name<input [(ngModel)]="form.customerName" name="customerName" required></label>
+        <label>Vendor ID<input [(ngModel)]="form.vendorId" name="vendorId"></label>
+        <label>Statement or invoice<select [(ngModel)]="form.statementOrInvoice" name="statementOrInvoice"><option value="I">Invoice</option><option value="S">Statement</option></select></label>
+        <label class="check-inline"><input [(ngModel)]="form.showPo" name="showPo" type="checkbox"> Show PO number</label>
+        <label>Address 1<input [(ngModel)]="form.address1" name="address1"></label>
+        <label>Address 2<input [(ngModel)]="form.address2" name="address2"></label>
+        <label>City<input [(ngModel)]="form.city" name="city"></label>
+        <label>State<input [(ngModel)]="form.state" name="state"></label>
+        <label>ZIP<input [(ngModel)]="form.zip" name="zip"></label>
+         <label>Email addresses<textarea [(ngModel)]="emailsText" name="emails" rows="2"></textarea><span class="input-hint">One per line or separated by commas.</span></label>
+      </div>
+      <div class="form-actions"><button class="button secondary" type="button" (click)="startAdd()" *ngIf="selectedCustomer">Cancel</button><button class="button primary" type="submit" [disabled]="saving">{{saving ? 'Saving...' : selectedCustomer ? 'Save changes' : 'Add customer'}}</button></div>
+      <p *ngIf="message" class="notice success">{{message}}</p><p *ngIf="error" class="notice alert">{{error}}</p>
+    </form>
+  </div>
+</section>

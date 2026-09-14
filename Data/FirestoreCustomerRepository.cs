@@ -10,7 +10,7 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
         var snapshot = await firestore.Collection("customers").GetSnapshotAsync(cancellationToken);
         return snapshot.Documents.Select(doc =>
         {
-            var customer = doc.ConvertTo<Customer>();
+            var customer = doc.ConvertTo<FirestoreCustomer>();
             return new CustomerSummary
             {
                 CustomerNumber = customer.CustomerNumber,
@@ -23,32 +23,43 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
         .ToList();
     }
 
+    public async Task<IReadOnlyList<FirestoreCustomer>> GetAdminCustomerListAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot = await firestore.Collection("customers").GetSnapshotAsync(cancellationToken);
+        return snapshot.Documents.Select(doc => doc.ConvertTo<FirestoreCustomer>()).OrderBy(customer => customer.CustomerName).ToList();
+    }
+
     public async Task<IReadOnlyList<string>> GetCustomerEmailListAsync(int customerNumber, CancellationToken cancellationToken = default)
     {
         var doc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
         if (!doc.Exists)
             return [];
 
-        var customer = doc.ConvertTo<Customer>();
+        var customer = doc.ConvertTo<FirestoreCustomer>();
         return customer.Emails;
     }
 
-    public async Task<bool> InsertCustomerAsync(int customerNumber, string customerName, CancellationToken cancellationToken = default)
+    public async Task<bool> InsertCustomerAsync(FirestoreCustomer customer, CancellationToken cancellationToken = default)
     {
-        var docRef = firestore.Collection("customers").Document(customerNumber.ToString());
+        var docRef = firestore.Collection("customers").Document(customer.CustomerNumber.ToString());
         var doc = await docRef.GetSnapshotAsync(cancellationToken);
         if (doc.Exists)
             return false;
 
-        var customer = new Customer
-        {
-            CustomerNumber = customerNumber,
-            CustomerName = (customerName ?? string.Empty).Trim(),
-            ShowPo = false,
-            StatementOrInvoice = "I",
-            Emails = []
-        };
+        Normalize(customer);
+        await docRef.SetAsync(customer, cancellationToken: cancellationToken);
+        return true;
+    }
 
+    public async Task<bool> UpdateCustomerAsync(int customerNumber, FirestoreCustomer customer, CancellationToken cancellationToken = default)
+    {
+        var docRef = firestore.Collection("customers").Document(customerNumber.ToString());
+        var doc = await docRef.GetSnapshotAsync(cancellationToken);
+        if (!doc.Exists)
+            return false;
+
+        customer.CustomerNumber = customerNumber;
+        Normalize(customer);
         await docRef.SetAsync(customer, cancellationToken: cancellationToken);
         return true;
     }
@@ -68,11 +79,24 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
         if (!custDoc.Exists)
             return null;
 
-        var customer = custDoc.ConvertTo<Customer>();
+        var customer = custDoc.ConvertTo<FirestoreCustomer>();
         return new UserInfoResult
         {
             CompanyNumber = customer.CustomerNumber,
             CompanyName = customer.CustomerName
         };
+    }
+
+    private static void Normalize(FirestoreCustomer customer)
+    {
+        customer.CustomerName = customer.CustomerName.Trim();
+        customer.VendorId = customer.VendorId.Trim();
+        customer.StatementOrInvoice = string.IsNullOrWhiteSpace(customer.StatementOrInvoice) ? "I" : customer.StatementOrInvoice.Trim().ToUpperInvariant();
+        customer.Address1 = customer.Address1.Trim();
+        customer.Address2 = customer.Address2.Trim();
+        customer.City = customer.City.Trim();
+        customer.State = customer.State.Trim();
+        customer.Zip = customer.Zip.Trim();
+        customer.Emails = customer.Emails.Where(email => !string.IsNullOrWhiteSpace(email)).Select(email => email.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }

@@ -344,7 +344,7 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
         var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(toDate, DateTimeKind.Utc));
 
         var customerDoc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
-        var customer = customerDoc.Exists ? customerDoc.ConvertTo<Customer>() : null;
+        var customer = customerDoc.Exists ? customerDoc.ConvertTo<FirestoreCustomer>() : null;
 
         Query query = firestore.Collection("invoices")
             .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)

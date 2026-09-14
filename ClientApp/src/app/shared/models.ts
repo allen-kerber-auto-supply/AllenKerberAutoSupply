@@ -30,6 +30,18 @@ export interface CustomerSummary {
   customerName: string;
 }
 
+export interface FirestoreCustomer extends CustomerSummary {
+  showPo: boolean;
+  vendorId: string;
+  statementOrInvoice: string;
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  zip: string;
+  emails: string[];
+}
+
 export interface EmailGroup {
   customerNumber: number;
   customerName: string;
@@ -132,5 +144,5 @@ export interface AccountSummary {
   calls?: SalesCall[];
 }
 
-export type Destination = 'invoice' | 'invoice-upload' | 'sales' | 'choose' | 'admin' | 'password-change' | null;
+export type Destination = 'invoice' | 'invoice-upload' | 'sales' | 'choose' | 'admin' | 'customer-admin' | 'password-change' | null;
 export type Theme = 'light' | 'dark';

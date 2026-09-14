@@ -15,6 +15,7 @@
       [theme]="theme"
       [authenticated]="authenticated"
       [canManageUsers]="canManageUsers"
+      [canManageCustomers]="canManageCustomers"
       [hasDualRoles]="hasDualRoles"
       [destination]="destination"
       [name]="name"
@@ -22,6 +23,7 @@
       [signingOut]="signingOut"
       (themeToggle)="toggleTheme()"
       (adminRequested)="go('admin')"
+      (customerAdminRequested)="go('customer-admin')"
       (switchRequested)="switchView()"
       (logoutRequested)="logout()"></app-header>
 
@@ -174,6 +176,7 @@
       (rolesClosed)="editingRolesUser=null"
       (deleteClosed)="deletingUser=null"
       (editingRoleToggled)="toggleEditingRole($event.role, $event.selected)"></app-user-admin>
+    <app-customer-admin *ngIf="authenticated && destination==='customer-admin'"></app-customer-admin>
 
   </main>
 

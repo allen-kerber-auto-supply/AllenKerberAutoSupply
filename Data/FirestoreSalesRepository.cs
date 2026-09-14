@@ -364,7 +364,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             customers = custSnapshot.Documents
                 .Select(d =>
                 {
-                    var c = d.ConvertTo<Customer>();
+                    var c = d.ConvertTo<FirestoreCustomer>();
                     return new SalesCustomer
                     {
                         CustomerNumber = c.CustomerNumber,
@@ -542,14 +542,14 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         }
 
         var custQuery = await firestore.Collection("customers")
-            .WhereEqualTo(nameof(Customer.CustomerName), name)
+            .WhereEqualTo(nameof(FirestoreCustomer.CustomerName), name)
             .Limit(1)
             .GetSnapshotAsync(cancellationToken);
 
         int custNo = 0;
         if (custQuery.Documents.Count > 0)
         {
-            var cust = custQuery.Documents[0].ConvertTo<Customer>();
+            var cust = custQuery.Documents[0].ConvertTo<FirestoreCustomer>();
             custNo = cust.CustomerNumber;
         }
 
