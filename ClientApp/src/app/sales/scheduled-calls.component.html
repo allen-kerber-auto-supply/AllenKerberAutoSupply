@@ -35,7 +35,7 @@
           <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0 || call.status===2">{{call.status===1 ? 'Completed' : call.status===2 ? 'Rescheduled' : 'Scheduled'}}</span>
         </div>
         <div class="call-record-meta">
-          <span class="call-date-value"><b>Call date</b> {{(call.callDate || call.createdDate) | date:'M/d/yyyy h:mm a'}}</span>
+          <span class="call-date-value"><b>Call date</b> {{formatCallDate(call.callDate || call.createdDate)}}</span>
           <span *ngIf="call.followUpDate"><b>Follow-up</b> {{call.followUpDate | date:'M/d/yyyy'}}</span>
           <span><b>Rep</b> {{call.repName || call.salesRepEmail || call.repEmail || 'Unassigned'}}</span>
         </div>

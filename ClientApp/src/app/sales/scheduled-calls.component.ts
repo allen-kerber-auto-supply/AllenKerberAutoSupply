@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SalesCall } from '../shared/models';
+import { formatSalesCallDate } from './sales-date-format';
 
 @Component({
   selector: 'app-scheduled-calls',
@@ -26,6 +27,10 @@ export class ScheduledCallsComponent {
   @Output() filtersChanged = new EventEmitter<void>();
   @Output() accountFilterChange = new EventEmitter<string>();
   @Output() dateRangeChange = new EventEmitter<{ dateFrom: string; dateTo: string }>();
+
+  formatCallDate(dateString?: string): string {
+    return formatSalesCallDate(dateString);
+  }
 
   get filteredCalls(): SalesCall[] {
     const query = this.accountFilter.trim().toLowerCase();

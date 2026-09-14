@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AccountSummary, SalesCall } from '../shared/models';
+import { formatSalesCallDate } from './sales-date-format';
 
 export type HistoryViewMode = 'records' | 'summary';
 
@@ -38,6 +39,10 @@ export class SalesHistoryComponent {
   @Output() deleteRequested = new EventEmitter<SalesCall>();
   @Output() summarySelected = new EventEmitter<AccountSummary>();
   @Output() summaryClosed = new EventEmitter<void>();
+
+  formatCallDate(dateString?: string): string {
+    return formatSalesCallDate(dateString);
+  }
 
   setViewMode(viewMode: HistoryViewMode) {
     this.viewModeChange.emit(viewMode);
