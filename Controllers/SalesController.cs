@@ -120,17 +120,33 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
     }
 
     [HttpGet("calls")]
-    public async Task<IActionResult> GetCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] string? accountFilter, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken cancellationToken = default)
     {
         var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
-        return Ok(await repository.GetCallRecordsAsync(effectiveEmail, fromDate, toDate, cancellationToken));
+        var calls = await repository.GetCallRecordsAsync(effectiveEmail, fromDate, toDate, cancellationToken);
+        var filter = accountFilter?.Trim();
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            calls = calls
+                .Where(c => (c.AccountName ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                            (c.ContactName ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var safePage = Math.Max(page, 1);
+        return Ok(new PagedSalesCallsResponse
+        {
+            TotalCount = calls.Count,
+            Calls = calls.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToList()
+        });
     }
 
     [HttpGet("calls/upcoming")]
-    public async Task<IActionResult> GetUpcomingCallRecords([FromQuery] string? salesRepEmail, [FromQuery] DateTime fromDate, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetUpcomingCallRecords([FromQuery] string? salesRepEmail, CancellationToken cancellationToken)
     {
         var effectiveEmail = GetEffectiveRepEmail(salesRepEmail);
-        return Ok(await repository.GetUpComingCallRecordsAsync(effectiveEmail, DateTime.UtcNow, fromDate, cancellationToken));
+        return Ok(await repository.GetUpComingCallRecordsAsync(effectiveEmail, cancellationToken));
     }
 
     [HttpGet("calls/by-account")]

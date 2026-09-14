@@ -50,8 +50,6 @@
         [calls]="scheduledCalls"
         [loading]="loadingScheduledCalls"
         [isAdmin]="isSalesAdminView"
-        [dateFrom]="scheduledDateFrom"
-        [dateTo]="scheduledDateTo"
         [accountFilter]="scheduledAccountFilter"
         [accountOptions]="scheduledAccountOptions"
         (newCallRequested)="setSalesTab('new-call')"
@@ -59,7 +57,7 @@
         (completeRequested)="openCompleteModal($event)"
         (deleteRequested)="deleteCall($event)"
         (accountFilterChange)="scheduledAccountFilter = $event"
-        (dateRangeChange)="onScheduledDateRangeChange($event)"></app-scheduled-calls>
+        ></app-scheduled-calls>
 
       <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="handleNewCallSaved($event)"></app-new-call>
 
@@ -68,6 +66,8 @@
         [isAdmin]="isSalesAdminView"
         [viewMode]="historyViewMode"
         [loading]="loadingHistory"
+        [loadingMore]="loadingMoreHistory"
+        [totalCount]="historyTotalCount"
         [dateFrom]="historyDateFrom"
         [dateTo]="historyDateTo"
         [accountFilter]="historyAccountFilter"
@@ -88,7 +88,8 @@
         (editRequested)="openEditCall($event)"
         (deleteRequested)="deleteCall($event)"
         (summarySelected)="selectAccountSummary($event)"
-        (summaryClosed)="clearSelectedSummaryAccount()"></app-sales-history>
+        (summaryClosed)="clearSelectedSummaryAccount()"
+        (loadMoreRequested)="loadMoreHistory()"></app-sales-history>
 
       <app-sales-admin
         *ngIf="salesTab==='admin' && isSalesAdminView"

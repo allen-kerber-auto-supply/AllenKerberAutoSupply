@@ -122,3 +122,9 @@ public sealed class AccountSummaryResponse
     public DateTime? LastCallDate { get; set; }
     public List<SalesCall> Calls { get; set; } = [];
 }
+
+public sealed class PagedSalesCallsResponse
+{
+    public IReadOnlyList<SalesCall> Calls { get; set; } = [];
+    public int TotalCount { get; set; }
+}

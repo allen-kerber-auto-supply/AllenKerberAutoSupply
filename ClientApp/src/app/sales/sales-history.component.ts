@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AccountSummary, SalesCall } from '../shared/models';
 import { formatSalesCallDate } from './sales-date-format';
@@ -13,10 +13,12 @@ export type HistoryViewMode = 'records' | 'summary';
   templateUrl: './sales-history.component.html',
   styleUrl: './sales-history.component.css'
 })
-export class SalesHistoryComponent {
+export class SalesHistoryComponent implements OnChanges {
   @Input() isAdmin = false;
   @Input() viewMode: HistoryViewMode = 'records';
   @Input() loading = false;
+  @Input() loadingMore = false;
+  @Input() totalCount = 0;
   @Input() dateFrom = '';
   @Input() dateTo = '';
   @Input() accountFilter = '';
@@ -39,6 +41,15 @@ export class SalesHistoryComponent {
   @Output() deleteRequested = new EventEmitter<SalesCall>();
   @Output() summarySelected = new EventEmitter<AccountSummary>();
   @Output() summaryClosed = new EventEmitter<void>();
+  @Output() loadMoreRequested = new EventEmitter<void>();
+
+  visibleCalls: SalesCall[] = [];
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['calls']) {
+      this.visibleCalls = this.calls;
+    }
+  }
 
   formatCallDate(dateString?: string): string {
     return formatSalesCallDate(dateString);
@@ -57,6 +68,14 @@ export class SalesHistoryComponent {
   onDateRangeChanged() {
     this.dateRangeChange.emit({ dateFrom: this.dateFrom, dateTo: this.dateTo });
     this.filtersChanged.emit();
+  }
+
+  onCallListScroll(event: Event) {
+    const element = event.target as HTMLElement;
+    if (element.scrollTop + element.clientHeight < element.scrollHeight - 160) return;
+    if (this.loadingMore || this.calls.length >= this.totalCount) return;
+
+    this.loadMoreRequested.emit();
   }
 
   onCardKeydown(event: KeyboardEvent, call: SalesCall) {

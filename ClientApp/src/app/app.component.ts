@@ -58,13 +58,12 @@ export class AppComponent implements OnInit {
   adminRepFilter = '';
   selectedSalesFilterRep = '';
   scheduledCalls: SalesCall[] = [];
-  scheduledDateFrom = toDateInputValue(new Date());
-  scheduledDateTo = '';
   scheduledAccountFilter = '';
   scheduledAccountOptions: string[] = [];
   loadingScheduledCalls = false;
   callHistory: SalesCall[] = [];
   filteredCallHistory: SalesCall[] = [];
+  historyTotalCount = 0;
   callHistoryAccountOptions: string[] = [];
   selectedSummaryAccount = '';
   selectedAccountSummaryCalls: SalesCall[] = [];
@@ -75,6 +74,8 @@ export class AppComponent implements OnInit {
   historyDateTo = toDateInputValue(new Date());
   historyAccountFilter = '';
   loadingHistory = false;
+  loadingMoreHistory = false;
+  private historyPage = 1;
   callSuccessMessage = '';
   private callSuccessToastTimer: number | null = null;
 
@@ -569,15 +570,21 @@ export class AppComponent implements OnInit {
 
   loadCallHistory() {
     this.loadingHistory = true;
+    this.loadingMoreHistory = false;
+    this.historyPage = 1;
     const params: Record<string, string> = {};
     if (this.selectedSalesFilterRep) params['salesRepEmail'] = this.selectedSalesFilterRep;
 
     if (this.historyViewMode === 'records') {
       if (this.historyDateFrom) params['fromDate'] = this.historyDateFrom;
       if (this.historyDateTo) params['toDate'] = this.historyDateTo;
+      if (this.historyAccountFilter.trim()) params['accountFilter'] = this.historyAccountFilter.trim();
+      params['page'] = '1';
+      params['pageSize'] = '30';
       this.salesService.getCalls(params).subscribe({
-        next: calls => {
-          this.callHistory = calls || [];
+        next: result => {
+          this.callHistory = result?.calls || [];
+          this.historyTotalCount = result?.totalCount || 0;
           this.callHistoryAccountOptions = [...new Set(this.callHistory.map(c => (c.accountName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
           this.applyHistoryFilter();
           this.loadingHistory = false;
@@ -586,6 +593,7 @@ export class AppComponent implements OnInit {
           this.callHistory = [];
           this.filteredCallHistory = [];
           this.callHistoryAccountOptions = [];
+          this.historyTotalCount = 0;
           this.loadingHistory = false;
         }
       });
@@ -614,9 +622,30 @@ export class AppComponent implements OnInit {
     }
   }
 
-  onScheduledDateRangeChange(range: { dateFrom: string; dateTo: string }) {
-    this.scheduledDateFrom = range.dateFrom;
-    this.scheduledDateTo = range.dateTo;
+  loadMoreHistory() {
+    if (this.loadingHistory || this.loadingMoreHistory || this.callHistory.length >= this.historyTotalCount) return;
+
+    this.loadingMoreHistory = true;
+    const params: Record<string, string> = {
+      page: String(this.historyPage + 1),
+      pageSize: '30'
+    };
+    if (this.selectedSalesFilterRep) params['salesRepEmail'] = this.selectedSalesFilterRep;
+    if (this.historyDateFrom) params['fromDate'] = this.historyDateFrom;
+    if (this.historyDateTo) params['toDate'] = this.historyDateTo;
+    if (this.historyAccountFilter.trim()) params['accountFilter'] = this.historyAccountFilter.trim();
+
+    this.salesService.getCalls(params).subscribe({
+      next: result => {
+        this.historyPage += 1;
+        this.callHistory = [...this.callHistory, ...(result?.calls || [])];
+        this.filteredCallHistory = [...this.callHistory];
+        this.loadingMoreHistory = false;
+      },
+      error: () => {
+        this.loadingMoreHistory = false;
+      }
+    });
   }
 
   onHistoryDateRangeChange(range: { dateFrom: string; dateTo: string }) {

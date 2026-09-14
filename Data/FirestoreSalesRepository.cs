@@ -653,12 +653,11 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         return await ApplyCustomerStatusAsync(calls, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<SalesCall>> GetUpComingCallRecordsAsync(string salesRepEmail, DateTime currentDateTime, DateTime fromDate, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SalesCall>> GetUpComingCallRecordsAsync(string salesRepEmail, CancellationToken cancellationToken = default)
     {
         string email = (salesRepEmail ?? string.Empty).Trim().ToLowerInvariant();
         var query = firestore.Collection("sales_calls")
-            .WhereIn(nameof(SalesCall.Status), new[] { 0, 2 })
-            .WhereGreaterThan(nameof(SalesCall.CallDate), Timestamp.FromDateTime(DateTime.SpecifyKind(currentDateTime, DateTimeKind.Utc)));
+            .WhereIn(nameof(SalesCall.Status), new[] { 0, 2 });
         if (!string.IsNullOrWhiteSpace(email))
         {
             query = query.WhereEqualTo(nameof(SalesCall.SalesRepEmail), email);

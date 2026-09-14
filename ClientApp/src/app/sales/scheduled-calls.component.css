@@ -6,6 +6,22 @@
   white-space: nowrap;
 }
 
+.scheduled-call-viewport {
+  height: min(750px, calc(100vh - 280px));
+  min-height: 240px;
+  max-height: 750px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem;
+}
+
+.virtual-scroll-status {
+  margin: 0.75rem 0 0.25rem;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.8rem;
+}
+
 .call-record-meta {
   display: flex;
   flex-wrap: wrap;

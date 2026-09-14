@@ -1,32 +1,9 @@
 <div class="sales-tab-content">
-  <div class="card history-filter-card">
-    <div class="history-filters-grid">
-      <div class="date-range">
-        <label>From Date <input type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="onDateRangeChanged()"></label>
-        <label>To Date <input type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="onDateRangeChanged()"></label>
-      </div>
-      <label>Account Search
-        <div class="input-with-clear">
-          <input [ngModel]="accountFilter" list="scheduledAccountOptions" placeholder="Filter by account name..." (ngModelChange)="onAccountFilterChanged($event)">
-          <button *ngIf="accountFilter" class="clear-btn" type="button" title="Clear account search" (click)="onAccountFilterChanged('')">&times;</button>
-        </div>
-        <datalist id="scheduledAccountOptions"><option *ngFor="let accountName of accountOptions" [value]="accountName"></option></datalist>
-      </label>
-    </div>
-  </div>
   <div class="card table">
-    <div class="table-header-row">
-      <div>
-        <h2>Scheduled Calls</h2>
-        <p class="muted-note">Upcoming and pending calls requiring attention</p>
-      </div>
-      <div class="table-actions">
-        <button class="button primary" type="button" (click)="newCallRequested.emit()">+ Log New Call</button>
-      </div>
-    </div>
     <div *ngIf="loading" class="state"><p>Loading scheduled calls...</p></div>
-    <div *ngIf="!loading && calls.length" class="call-record-list">
-      <article *ngFor="let call of filteredCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+    <div *ngIf="!loading && calls.length" class="scheduled-call-viewport" (scroll)="onCallListScroll($event)">
+      <div class="call-record-list">
+      <article *ngFor="let call of visibleCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
         <div class="call-record-header">
           <div>
             <h3>{{call.accountName}}</h3>
@@ -45,6 +22,8 @@
           <button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button>
         </div>
       </article>
+      </div>
+      <p *ngIf="visibleCalls.length < filteredCalls.length" class="virtual-scroll-status">Showing {{visibleCalls.length}} of {{filteredCalls.length}} records</p>
     </div>
     <div *ngIf="!loading && !filteredCalls.length" class="state">
       <p>No scheduled calls found for the selected filter.</p>

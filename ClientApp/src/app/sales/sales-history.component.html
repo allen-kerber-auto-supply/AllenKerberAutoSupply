@@ -26,14 +26,17 @@
   </div>
 
   <div *ngIf="viewMode === 'records'" class="card table">
-    <div class="table-header-row"><h2>{{calls.length}} Call Record{{calls.length === 1 ? '' : 's'}}</h2></div>
+    <div class="table-header-row"><h2>{{totalCount}} Call Record{{totalCount === 1 ? '' : 's'}}</h2></div>
     <div *ngIf="loading" class="state"><p>Loading call history...</p></div>
-    <div *ngIf="!loading && calls.length" class="call-record-list">
-      <article *ngFor="let call of calls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
+    <div *ngIf="!loading && calls.length" class="call-record-viewport" (scroll)="onCallListScroll($event)">
+      <div class="call-record-list">
+      <article *ngFor="let call of visibleCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
         <div class="call-record-header"><div class="status-stack"><span class="status-badge" [class.completed]="call.status === 1" [class.scheduled]="call.status === 0">{{call.status === 1 ? 'Completed' : 'Scheduled'}}</span><span *ngIf="isProspect(call)" class="status-badge prospect">Prospect</span></div><h3>{{call.accountName}}</h3></div>
         <div class="call-record-meta"><div class="call-record-row"><span class="call-record-label">Call Date</span><span class="call-record-value">{{formatCallDate(call.callDate || call.createdDate)}}</span></div><div class="call-record-row"><span class="call-record-label">Rep</span><span class="call-record-value">{{repDisplayName(call.repName, call.salesRepEmail || call.repEmail)}}</span></div></div>
         <div class="call-record-actions"><button class="button secondary view-btn" type="button" (click)="$event.stopPropagation(); editRequested.emit(call)">Edit</button><button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button></div>
       </article>
+      </div>
+      <p *ngIf="calls.length < totalCount" class="virtual-scroll-status">Showing {{calls.length}} of {{totalCount}} records{{loadingMore ? ' ...' : ''}}</p>
     </div>
     <div *ngIf="!loading && !calls.length" class="state"><p>No call records found matching criteria.</p></div>
   </div>

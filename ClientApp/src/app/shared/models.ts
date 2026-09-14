@@ -118,6 +118,11 @@ export interface SalesCall {
   isProspect?: boolean;
 }
 
+export interface PagedSalesCalls {
+  calls: SalesCall[];
+  totalCount: number;
+}
+
 export interface AccountSummary {
   accountName: string;
   totalCalls: number;

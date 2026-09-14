@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AccountSummary, SalesCall } from '../shared/models';
+import { AccountSummary, PagedSalesCalls, SalesCall } from '../shared/models';
 
 @Injectable({ providedIn: 'root' })
 export class SalesService {
@@ -43,7 +43,7 @@ export class SalesService {
   }
 
   getCalls(params: Record<string, string> = {}) {
-    return this.http.get<SalesCall[]>('/api/sales/calls', { params });
+    return this.http.get<PagedSalesCalls>('/api/sales/calls', { params });
   }
 
   getAccountSummaries(params: Record<string, string> = {}) {
