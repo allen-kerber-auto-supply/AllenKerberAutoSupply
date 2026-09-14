@@ -532,11 +532,21 @@ export class AppComponent implements OnInit {
   saveEditCall() {
     if (!this.editingCall || (!this.editingCall.id && !this.editingCall.callID)) return;
     const callId = this.editingCall.id || this.editingCall.callID;
-    this.salesService.updateCall(Number(callId), this.editingCall).subscribe({
+    const call = {
+      ...this.editingCall,
+      followUpDate: this.editingCall.followUpDate || undefined
+    };
+    this.salesService.updateCall(Number(callId), call).subscribe({
       next: () => {
         this.editingCall = null;
         if (this.salesTab === 'scheduled') this.loadScheduledCalls();
         if (this.salesTab === 'history') this.loadCallHistory();
+          this.callSuccessMessage = 'Call updated successfully!';
+          if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
+          this.callSuccessToastTimer = window.setTimeout(() => {
+            this.callSuccessMessage = '';
+            this.callSuccessToastTimer = null;
+          }, 4000);
       },
       error: () => {}
     });
