@@ -253,6 +253,14 @@ public sealed class InvoicesController(
         var amount = ParseDecimal(GetRowValue(row, "invoice_amount", "invoiceAmount", "amount", "invoice total", "invoicetotal")) ?? 0m;
         var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
         var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
+        if (string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paymentMethod.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paymentMethod.Trim(), "CHECK", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(transactionType.Trim(), "VOID", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, null);
+        }
+
         var employeeId = ParseInt(GetRowValue(row, "employee_no", "employeeNo", "employee", "employee number", "employeenumber")) ?? 0;
         var poNumber = GetRowValue(row, "po_number", "poNumber", "po number", "ponumber") ?? string.Empty;
         var actualStoreNumber = ParseInt(GetRowValue(row, "store_no", "storeNo", "store", "store number", "storenumber")) ?? storeNumber;
