@@ -24,7 +24,7 @@ export class NewCallComponent implements OnChanges {
   @Input() accountNameOptions: string[] = [];
   @Input() isAdmin = false;
   @Input() currentUserEmail = '';
-  @Output() saved = new EventEmitter<void>();
+  @Output() saved = new EventEmitter<SalesCall>();
 
   newCall: SalesCall = this.emptyCall();
   selectedCustomerHistory: SalesCall[] = [];
@@ -104,7 +104,7 @@ export class NewCallComponent implements OnChanges {
   }
 
   resetNewCallForm(): void {
-    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 1, callDate: today(), followUpDate: '' };
+    this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 0, callDate: today(), followUpDate: '' };
     this.callTime = currentTimeValue();
     this.durationHours = 0;
     this.durationMinutes = 0;
@@ -149,8 +149,9 @@ export class NewCallComponent implements OnChanges {
     this.salesService.createCall(payload).subscribe({
       next: () => {
         this.savingCall = false;
+        const savedCall = payload;
         this.resetNewCallForm();
-        this.saved.emit();
+        this.saved.emit(savedCall);
       },
       error: error => {
         this.savingCall = false;

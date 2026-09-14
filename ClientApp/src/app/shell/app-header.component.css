@@ -1,1 +1,11 @@
-:host { display: contents; }
+:host {
+	display: block;
+	width: min(100%, var(--page-max, 1280px));
+	margin-inline: auto;
+	box-sizing: border-box;
+}
+
+:host > header {
+	width: 100%;
+	box-sizing: border-box;
+}

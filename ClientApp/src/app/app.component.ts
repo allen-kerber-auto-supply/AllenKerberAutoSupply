@@ -417,15 +417,19 @@ export class AppComponent implements OnInit {
     }
   }
 
-  handleNewCallSaved() {
-    this.loadScheduledCalls();
-    this.setSalesTab('history');
+  handleNewCallSaved(call: SalesCall) {
+    this.showCallStatusTab(call.status);
     this.callSuccessMessage = 'Call saved successfully!';
     if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
     this.callSuccessToastTimer = window.setTimeout(() => {
       this.callSuccessMessage = '';
       this.callSuccessToastTimer = null;
     }, 4000);
+  }
+
+  private showCallStatusTab(status?: number) {
+    const tab = status === 0 || status === 2 ? 'scheduled' : 'history';
+    this.setSalesTab(tab);
   }
 
   loadScheduledCalls() {
@@ -539,14 +543,13 @@ export class AppComponent implements OnInit {
     this.salesService.updateCall(Number(callId), call).subscribe({
       next: () => {
         this.editingCall = null;
-        if (this.salesTab === 'scheduled') this.loadScheduledCalls();
-        if (this.salesTab === 'history') this.loadCallHistory();
-          this.callSuccessMessage = 'Call updated successfully!';
-          if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
-          this.callSuccessToastTimer = window.setTimeout(() => {
-            this.callSuccessMessage = '';
-            this.callSuccessToastTimer = null;
-          }, 4000);
+        this.showCallStatusTab(call.status);
+        this.callSuccessMessage = 'Call updated successfully!';
+        if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
+        this.callSuccessToastTimer = window.setTimeout(() => {
+          this.callSuccessMessage = '';
+          this.callSuccessToastTimer = null;
+        }, 4000);
       },
       error: () => {}
     });
