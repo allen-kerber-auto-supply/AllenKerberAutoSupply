@@ -5,6 +5,8 @@ namespace AllenKerberAutoSupply.Data;
 
 public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoiceRepository
 {
+    private const int SearchPageSize = 30;
+
     public async Task<IReadOnlyList<int>> GetDistinctStoreNumbersAsync(CancellationToken cancellationToken = default)
     {
         var snapshot = await firestore.Collection("stores").GetSnapshotAsync(cancellationToken);
@@ -211,7 +213,7 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
         }, cancellationToken: cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Invoice>> FindAsync(string? invoiceNumber, string? customerNumber, CancellationToken cancellationToken)
+    public async Task<InvoiceSearchPage> FindAsync(string? invoiceNumber, string? customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken)
     {
         Query query = firestore.Collection("invoices");
         if (!string.IsNullOrWhiteSpace(invoiceNumber))
@@ -223,26 +225,27 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
         {
             query = query.WhereEqualTo(nameof(Invoice.CustomerNumber), custNo);
         }
-        var snapshot = await query.Limit(100).GetSnapshotAsync(cancellationToken);
-        return snapshot.Documents.Select(document => document.ConvertTo<Invoice>()).ToArray();
+        var totalCount = await GetQueryCountAsync(query, cancellationToken);
+        var snapshot = await ApplyInvoiceOrdering(query, sortKey, sortDirection).Offset(page * SearchPageSize).Limit(SearchPageSize).GetSnapshotAsync(cancellationToken);
+        return ToSearchPage(snapshot.Documents.Select(document => document.ConvertTo<Invoice>()), totalCount);
     }
 
-    public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, CancellationToken cancellationToken = default)
+    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
     {
         var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
         var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
 
         Query query = firestore.Collection("invoices")
             .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp)
-            .OrderBy(nameof(Invoice.InvoiceDate))
-            .Limit(200);
+            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
+        var totalCount = await GetQueryCountAsync(query, cancellationToken);
+        query = ApplyInvoiceOrdering(query, sortKey, sortDirection).Offset(page * SearchPageSize).Limit(SearchPageSize);
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        return snapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToArray();
+        return ToSearchPage(snapshot.Documents.Select(d => d.ConvertTo<Invoice>()), totalCount);
     }
 
-    public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByDtmAndCustomerAsync(DateTime beginDate, DateTime endDate, int customerNumber, CancellationToken cancellationToken = default)
+    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAndCustomerAsync(DateTime beginDate, DateTime endDate, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
     {
         var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
         var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
@@ -250,23 +253,23 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
         Query query = firestore.Collection("invoices")
             .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)
             .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp)
-            .OrderBy(nameof(Invoice.InvoiceDate))
-            .Limit(200);
+            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
+        var totalCount = await GetQueryCountAsync(query, cancellationToken);
+        query = ApplyInvoiceOrdering(query, sortKey, sortDirection).Offset(page * SearchPageSize).Limit(SearchPageSize);
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        return snapshot.Documents.Select(d => d.ConvertTo<Invoice>()).ToArray();
+        return ToSearchPage(snapshot.Documents.Select(d => d.ConvertTo<Invoice>()), totalCount);
     }
 
-    public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, CancellationToken cancellationToken = default)
+    public async Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();
         if (raw.Length < 3 || !raw.All(char.IsDigit))
         {
-            return [];
+            return new InvoiceSearchPage();
         }
 
-        Query query = firestore.Collection("invoices");
+        Query query = ApplyInvoiceOrdering(firestore.Collection("invoices"), sortKey, sortDirection);
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
         var invoices = snapshot.Documents
@@ -274,19 +277,20 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
             .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        return invoices.OrderBy(i => i.InvoiceNumber).ToList();
+        return ToSearchPage(invoices.Skip(page * SearchPageSize).Take(SearchPageSize), invoices.Count);
     }
 
-    public async Task<IReadOnlyList<Invoice>> GetInvoiceDataByInvoiceNumberAndCustomerAsync(string invoiceNumber, int customerNumber, CancellationToken cancellationToken = default)
+    public async Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAndCustomerAsync(string invoiceNumber, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();
         if (raw.Length < 3 || !raw.All(char.IsDigit))
         {
-            return [];
+            return new InvoiceSearchPage();
         }
 
         Query query = firestore.Collection("invoices")
             .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber);
+        query = ApplyInvoiceOrdering(query, sortKey, sortDirection);
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
         var invoices = snapshot.Documents
@@ -294,7 +298,39 @@ public sealed class FirestoreInvoiceRepository(FirestoreDb firestore) : IInvoice
             .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        return invoices.OrderBy(i => i.InvoiceNumber).ToList();
+        return ToSearchPage(invoices.Skip(page * SearchPageSize).Take(SearchPageSize), invoices.Count);
+    }
+
+    private static async Task<int> GetQueryCountAsync(Query query, CancellationToken cancellationToken)
+    {
+        var countSnapshot = await query.Count().GetSnapshotAsync(cancellationToken);
+        return checked((int)countSnapshot.GetValue<long>(AggregateField.Count()));
+    }
+
+    private static InvoiceSearchPage ToSearchPage(IEnumerable<Invoice> invoices, int totalCount)
+    {
+        var items = invoices.ToArray();
+        return new InvoiceSearchPage
+        {
+            Items = items,
+            HasMore = items.Length == SearchPageSize,
+            TotalCount = totalCount
+        };
+    }
+
+    private static Query ApplyInvoiceOrdering(Query query, string? sortKey, string? sortDirection)
+    {
+        string field = sortKey?.Trim().ToLowerInvariant() switch
+        {
+            "customername" => nameof(Invoice.CustomerName),
+            "invoiceamount" => nameof(Invoice.InvoiceAmount),
+            "storenumber" => nameof(Invoice.StoreNumber),
+            _ => nameof(Invoice.InvoiceDate)
+        };
+
+        return string.Equals(sortDirection?.Trim(), "asc", StringComparison.OrdinalIgnoreCase)
+            ? query.OrderBy(field)
+            : query.OrderByDescending(field);
     }
 
     public async Task<IReadOnlyList<StatementInvoiceItem>> GetStatementInvoicesAsync(int customerNumber, DateTime fromDate, DateTime toDate, string commaSeparatedInvoiceNumbers, CancellationToken cancellationToken = default)

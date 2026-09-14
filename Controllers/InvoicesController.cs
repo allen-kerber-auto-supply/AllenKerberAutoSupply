@@ -29,8 +29,9 @@ public sealed class InvoicesController(
     IOptions<GoogleCloudOptions> googleCloudOptions) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> Search([FromQuery] string? invoiceNumber, [FromQuery] string? customerNumber, CancellationToken cancellationToken)
+    public async Task<IActionResult> Search([FromQuery] string? invoiceNumber, [FromQuery] string? customerNumber, [FromQuery] string? sortKey, [FromQuery] string? sortDirection, [FromQuery] int page = 0, CancellationToken cancellationToken = default)
     {
+        page = Math.Max(0, page);
         if (!string.IsNullOrWhiteSpace(invoiceNumber))
         {
             string normalizedInvoiceNumber = invoiceNumber.Trim();
@@ -41,12 +42,12 @@ public sealed class InvoicesController(
 
             if (!string.IsNullOrWhiteSpace(customerNumber) && int.TryParse(customerNumber, out int custNo))
             {
-                return Ok(await repository.GetInvoiceDataByInvoiceNumberAndCustomerAsync(normalizedInvoiceNumber, custNo, cancellationToken));
+                return Ok(await repository.GetInvoiceDataByInvoiceNumberAndCustomerAsync(normalizedInvoiceNumber, custNo, sortKey, sortDirection, page, cancellationToken));
             }
-            return Ok(await repository.GetInvoiceDataByInvoiceNumberAsync(normalizedInvoiceNumber, cancellationToken));
+            return Ok(await repository.GetInvoiceDataByInvoiceNumberAsync(normalizedInvoiceNumber, sortKey, sortDirection, page, cancellationToken));
         }
 
-        return Ok(await repository.FindAsync(invoiceNumber, customerNumber, cancellationToken));
+        return Ok(await repository.FindAsync(invoiceNumber, customerNumber, sortKey, sortDirection, page, cancellationToken));
     }
 
     [HttpGet("stores")]
@@ -84,14 +85,15 @@ public sealed class InvoicesController(
     }
 
     [HttpGet("by-date")]
-    public async Task<IActionResult> GetByDate([FromQuery] DateTime beginDate, [FromQuery] DateTime endDate, [FromQuery] int? customerNumber, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetByDate([FromQuery] DateTime beginDate, [FromQuery] DateTime endDate, [FromQuery] int? customerNumber, [FromQuery] string? sortKey, [FromQuery] string? sortDirection, [FromQuery] int page = 0, CancellationToken cancellationToken = default)
     {
+        page = Math.Max(0, page);
         if (customerNumber.HasValue)
         {
-            return Ok(await repository.GetInvoiceDataByDtmAndCustomerAsync(beginDate, endDate, customerNumber.Value, cancellationToken));
+            return Ok(await repository.GetInvoiceDataByDtmAndCustomerAsync(beginDate, endDate, customerNumber.Value, sortKey, sortDirection, page, cancellationToken));
         }
 
-        return Ok(await repository.GetInvoiceDataByDtmAsync(beginDate, endDate, cancellationToken));
+        return Ok(await repository.GetInvoiceDataByDtmAsync(beginDate, endDate, sortKey, sortDirection, page, cancellationToken));
     }
 
     [HttpGet("statement")]

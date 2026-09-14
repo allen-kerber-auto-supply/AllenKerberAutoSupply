@@ -3,6 +3,13 @@ using System.Text.Json.Serialization;
 
 namespace AllenKerberAutoSupply.Models;
 
+public sealed class InvoiceSearchPage
+{
+    public IReadOnlyList<Invoice> Items { get; init; } = [];
+    public bool HasMore { get; init; }
+    public int TotalCount { get; init; }
+}
+
 [FirestoreData]
 public sealed class Invoice
 {

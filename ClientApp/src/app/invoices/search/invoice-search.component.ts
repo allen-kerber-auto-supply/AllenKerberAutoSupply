@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { InvoiceService } from '../invoice.service';
+import { InvoiceSearchPage, InvoiceService } from '../invoice.service';
 import { CustomerSummary, Invoice } from '../../shared/models';
 
 type InvoiceSortKey = 'invoiceDate' | 'invoiceAmount' | 'customerName' | 'customerNumber';
@@ -33,6 +33,10 @@ export class InvoiceSearchComponent {
   showCustomerColumns = true;
   invoiceSortKey: InvoiceSortKey = 'invoiceDate';
   invoiceSortDirection: 'asc' | 'desc' = 'desc';
+  private searchPage = 0;
+  hasMore = false;
+  totalCount = 0;
+  loading = false;
 
   search() {
     this.error = '';
@@ -43,7 +47,7 @@ export class InvoiceSearchComponent {
 
     if (invoiceNumber) {
       this.customerName = '';
-      this.runSearch(this.invoiceService.searchByNumber(invoiceNumber));
+      this.loadPage(0, false);
       return;
     }
 
@@ -56,7 +60,7 @@ export class InvoiceSearchComponent {
       this.error = 'Select a date range to search by customer name.';
       return;
     }
-    this.runSearch(this.invoiceService.searchByDate(this.dateFrom, this.dateTo, customerNumber ?? undefined));
+    this.loadPage(0, false);
   }
 
   toggleSort(key: InvoiceSortKey) {
@@ -66,7 +70,7 @@ export class InvoiceSearchComponent {
       this.invoiceSortKey = key;
       this.invoiceSortDirection = key === 'invoiceDate' || key === 'customerName' ? 'desc' : 'asc';
     }
-    this.sortInvoices();
+    this.search();
   }
 
   invoiceKey(invoice: Invoice) {
@@ -75,6 +79,22 @@ export class InvoiceSearchComponent {
 
   isSelected(invoice: Invoice) {
     return this.selectedInvoiceKeys.has(this.invoiceKey(invoice));
+  }
+
+  areAllInvoicesSelected() {
+    return this.invoices.length > 0 && this.invoices.every(invoice => this.isSelected(invoice));
+  }
+
+  someInvoicesSelected() {
+    return this.invoices.some(invoice => this.isSelected(invoice)) && !this.areAllInvoicesSelected();
+  }
+
+  toggleAllSelection(checked: boolean) {
+    if (checked) {
+      this.invoices.forEach(invoice => this.selectedInvoiceKeys.add(this.invoiceKey(invoice)));
+    } else {
+      this.invoices.forEach(invoice => this.selectedInvoiceKeys.delete(this.invoiceKey(invoice)));
+    }
   }
 
   toggleSelection(invoice: Invoice) {
@@ -87,26 +107,40 @@ export class InvoiceSearchComponent {
     return this.invoices.filter(invoice => this.isSelected(invoice));
   }
 
-  private runSearch(request: ReturnType<InvoiceService['searchByNumber']>) {
-    this.selectedInvoiceKeys.clear();
-    request.subscribe({
-      next: invoices => {
-        this.invoices = invoices || [];
-        this.sortInvoices();
-      },
-      error: error => this.error = error.status === 403 ? 'Update your password before using invoice lookup.' : 'Unable to search invoices.'
-    });
+  onResultsScroll(event: Event) {
+    const element = event.target as HTMLElement;
+    if (!this.loading && this.hasMore && element.scrollTop + element.clientHeight >= element.scrollHeight - 160) {
+      this.loadPage(this.searchPage + 1, true);
+    }
   }
 
-  private sortInvoices() {
-    const direction = this.invoiceSortDirection === 'asc' ? 1 : -1;
-    this.invoices = [...this.invoices].sort((a, b) => {
-      if (this.invoiceSortKey === 'invoiceDate') {
-        return ((a.invoiceDate ? new Date(a.invoiceDate).getTime() : 0) - (b.invoiceDate ? new Date(b.invoiceDate).getTime() : 0)) * direction;
+  private loadPage(page: number, append: boolean) {
+    const invoiceNumber = this.invoiceNumber.trim();
+    const customerName = this.customerName.trim();
+    const customerNumber = customerName ? this.resolveCustomerNumber(customerName) : undefined;
+    const request = invoiceNumber
+      ? this.invoiceService.searchByNumber(invoiceNumber, this.invoiceSortKey, this.invoiceSortDirection, page)
+      : this.invoiceService.searchByDate(this.dateFrom, this.dateTo, customerNumber ?? undefined, this.invoiceSortKey, this.invoiceSortDirection, page);
+
+    if (!append) {
+      this.selectedInvoiceKeys.clear();
+      this.invoices = [];
+      this.totalCount = 0;
+    }
+    this.loading = true;
+    request.subscribe({
+      next: result => {
+        const searchResult = result as InvoiceSearchPage;
+        this.invoices = append ? [...this.invoices, ...(searchResult.items || [])] : (searchResult.items || []);
+        this.searchPage = page;
+        this.hasMore = searchResult.hasMore;
+        this.totalCount = searchResult.totalCount;
+        this.loading = false;
+      },
+      error: error => {
+        this.loading = false;
+        this.error = error.status === 403 ? 'Update your password before using invoice lookup.' : 'Unable to search invoices.';
       }
-      if (this.invoiceSortKey === 'invoiceAmount') return ((Number(a.invoiceAmount) || 0) - (Number(b.invoiceAmount) || 0)) * direction;
-      if (this.invoiceSortKey === 'customerName') return (a.customerName || '').localeCompare(b.customerName || '') * direction;
-      return ((Number(a.customerNumber) || 0) - (Number(b.customerNumber) || 0)) * direction;
     });
   }
 

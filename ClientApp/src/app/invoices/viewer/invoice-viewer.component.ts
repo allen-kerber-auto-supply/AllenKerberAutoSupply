@@ -44,7 +44,7 @@ export class InvoiceViewerComponent implements OnInit, OnDestroy {
     this.error = '';
     if (!this.customer || !this.customerNumber) {
       this.invoiceService.getByNumber(this.invoiceNumber).subscribe({
-        next: invoices => this.applyInvoiceDetails(invoices),
+        next: result => this.applyInvoiceDetails(result.items),
         error: () => {}
       });
     }
@@ -100,8 +100,8 @@ export class InvoiceViewerComponent implements OnInit, OnDestroy {
     }
 
     this.invoiceService.getByNumber(this.invoiceNumber).subscribe({
-      next: invoices => {
-        this.applyInvoiceDetails(invoices);
+      next: result => {
+        this.applyInvoiceDetails(result.items);
         emitInvoice();
       },
       error: emitInvoice
