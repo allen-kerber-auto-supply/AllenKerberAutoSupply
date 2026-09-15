@@ -139,9 +139,7 @@
     <app-call-details
       [call]="selectedCallDetails"
       [isProspect]="selectedCallDetails ? isCallProspect(selectedCallDetails) : false"
-      [converting]="convertingProspect"
       (closed)="closeCallDetails()"
-      (convertRequested)="convertProspectToCustomer()"
       (editRequested)="openEditCall($event); closeCallDetails()"></app-call-details>
 
     <app-invoice-search *ngIf="authenticated && destination==='invoice'" [customers]="allCustomers" (uploadRequested)="go('invoice-upload')" (emailRequested)="openEmailModalForInvoices($event)" (printRequested)="printInvoices($event)" (invoiceSelected)="viewInvoice($event)"></app-invoice-search>

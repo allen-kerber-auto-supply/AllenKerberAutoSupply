@@ -38,10 +38,6 @@ export class SalesService {
     return this.http.delete(`/api/sales/calls/${callId}`);
   }
 
-  convertProspect(callId: number) {
-    return this.http.post(`/api/sales/calls/${callId}/convert-prospect`, {});
-  }
-
   getCalls(params: Record<string, string> = {}) {
     return this.http.get<PagedSalesCalls>('/api/sales/calls', { params });
   }

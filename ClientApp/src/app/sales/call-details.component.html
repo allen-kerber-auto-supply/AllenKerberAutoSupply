@@ -32,7 +32,6 @@
 
     <div class="modal-actions">
       <button class="button secondary" type="button" (click)="closed.emit()">Close</button>
-      <button *ngIf="isProspect" class="button secondary" type="button" (click)="convertRequested.emit()" [disabled]="converting">{{converting ? 'Adding...' : 'Add as Customer'}}</button>
       <button class="button primary" type="button" (click)="editRequested.emit(call)">Edit</button>
     </div>
   </div>

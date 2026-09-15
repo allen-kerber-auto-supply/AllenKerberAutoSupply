@@ -12,10 +12,8 @@ import { SalesCall } from '../shared/models';
 export class CallDetailsComponent {
   @Input() call: SalesCall | null = null;
   @Input() isProspect = false;
-  @Input() converting = false;
 
   @Output() closed = new EventEmitter<void>();
-  @Output() convertRequested = new EventEmitter<void>();
   @Output() editRequested = new EventEmitter<SalesCall>();
 
   formatCallDuration(duration?: number): string {

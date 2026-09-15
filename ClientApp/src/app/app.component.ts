@@ -87,7 +87,6 @@ export class AppComponent implements OnInit {
   completingComments = '';
   completingFollowUpDate = '';
   selectedCallDetails: SalesCall | null = null;
-  convertingProspect = false;
   editingCall: SalesCall | null = null;
   newSalesRep: SalesRep = { repName: '', repEmail: '' };
   newCustomerName = '';
@@ -513,32 +512,6 @@ export class AppComponent implements OnInit {
 
   openCallDetails(call: SalesCall) {
     this.selectedCallDetails = call;
-  }
-
-  convertProspectToCustomer() {
-    const call = this.selectedCallDetails;
-    const callId = call?.callID || Number(call?.id);
-    if (!call || !callId || this.convertingProspect) return;
-
-    this.convertingProspect = true;
-    this.salesService.convertProspect(Number(callId)).subscribe({
-      next: () => {
-        call.isProspect = false;
-        this.convertingProspect = false;
-        this.callSuccessMessage = 'Customer added successfully!';
-        if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
-        this.callSuccessToastTimer = window.setTimeout(() => {
-          this.callSuccessMessage = '';
-          this.callSuccessToastTimer = null;
-        }, 4000);
-        this.closeCallDetails();
-        this.loadSalesData();
-        if (this.salesTab === 'history') this.loadCallHistory();
-      },
-      error: () => {
-        this.convertingProspect = false;
-      }
-    });
   }
 
   closeCallDetails() {
