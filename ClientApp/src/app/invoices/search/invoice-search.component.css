@@ -2,6 +2,8 @@
 
 .table-header-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 
+.invoice-row.no-images { color: #b91c1c; }
+
 .invoice-search-col .lookup {
 	gap: .75rem;
 	padding: 1.15rem;
