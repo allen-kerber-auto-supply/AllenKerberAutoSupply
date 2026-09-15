@@ -15,6 +15,7 @@ import { Invoice, InvoiceUploadMissingImage, InvoiceUploadReconciliation, Misrea
 export class InvoiceUploadComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   @Output() backRequested = new EventEmitter<void>();
+  @Output() invoiceViewRequested = new EventEmitter<Invoice>();
 
   selectedStore = 0;
   storeOptions: number[] = [];
@@ -133,6 +134,18 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.http.post('/api/invoices/misread-barcodes/resolve', { id: item.id, invoiceNumber: draft.invoiceNumber.trim(), storeNumber: Number(draft.storeNumber) }).subscribe({
       next: () => { this.loadMisreadBarcodes(); this.loadReconciliation(); },
       error: error => alert(error.error?.message || 'Unable to resolve the selected misread barcode image.')
+    });
+  }
+
+  viewMissingInvoice(invoiceNumber: string) {
+    const normalized = (invoiceNumber || '').trim();
+    if (!normalized || this.selectedStore <= 0) return;
+    this.invoiceViewRequested.emit({
+      invoiceNumber: normalized,
+      storeNumber: this.selectedStore,
+      customerNumber: 0,
+      customerName: '',
+      invoiceAmount: 0
     });
   }
 

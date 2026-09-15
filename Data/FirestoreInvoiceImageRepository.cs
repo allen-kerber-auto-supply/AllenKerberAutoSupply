@@ -10,7 +10,8 @@ namespace AllenKerberAutoSupply.Data;
 public sealed class FirestoreInvoiceImageRepository(
     FirestoreDb firestore,
     StorageClient storageClient,
-    IOptions<GoogleCloudOptions> gcpOptions) : IInvoiceImageRepository
+    IOptions<GoogleCloudOptions> gcpOptions,
+    IInvoiceUploadReconciliationStore reconciliationStore) : IInvoiceImageRepository
 {
     public async Task<InvoiceImageLookup?> GetInvoiceImageLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
     {
@@ -207,45 +208,6 @@ public sealed class FirestoreInvoiceImageRepository(
         {
             return null;
         }
-    }
-
-    private async Task UpdateStoreUploadStateAsync(int storeNumber, string invoiceNumber, bool isInvoice, CancellationToken cancellationToken)
-    {
-        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
-        {
-            return;
-        }
-
-        var normalized = (invoiceNumber ?? string.Empty).Trim();
-        var storeRef = firestore.Collection("stores").Document(storeNumber.ToString());
-
-        await firestore.RunTransactionAsync(async transaction =>
-        {
-            var snapshot = await transaction.GetSnapshotAsync(storeRef);
-            var storeRecord = snapshot.Exists ? snapshot.ConvertTo<StoreRecord>() : new StoreRecord { StoreNumber = storeNumber };
-            var state = storeRecord.UploadState ?? new StoreUploadState();
-            state.InvoiceKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            state.ImageKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
-            if (isInvoice)
-            {
-                state.InvoiceKeys[normalized] = true;
-            }
-            else
-            {
-                state.ImageKeys[normalized] = true;
-            }
-
-            var invoiceKeys = state.InvoiceKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var imageKeys = state.ImageKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            state.MissingInvoiceImages = invoiceKeys.Except(imageKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-            state.MissingInvoices = imageKeys.Except(invoiceKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-            state.UpdatedAt = Timestamp.GetCurrentTimestamp();
-
-            storeRecord.StoreNumber = storeNumber;
-            storeRecord.UploadState = state;
-            transaction.Set(storeRef, storeRecord);
-        }, cancellationToken: cancellationToken);
     }
 
     public async Task<string> SaveMisreadBarcodeAsync(Stream imageStream, string fileName, string contentType, CancellationToken cancellationToken = default)
@@ -451,7 +413,7 @@ public sealed class FirestoreInvoiceImageRepository(
             transaction.Set(docRef, lookup);
         }, cancellationToken: cancellationToken);
 
-        await UpdateStoreUploadStateAsync(storeNumber, normalized, isInvoice: false, cancellationToken);
+        await reconciliationStore.ReconcileImageAsync(storeNumber, normalized, cancellationToken);
 
         // Update HasImages flag in invoices collection if invoice exists
         var invoiceRef = firestore.Collection("invoices").Document($"{storeNumber}_{normalized}");
