@@ -66,6 +66,28 @@ public sealed class FirestoreInvoiceRepository(
         return await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
     }
 
+    public async Task DeleteInvoiceAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)
+    {
+        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
+            throw new ArgumentException("A store number and invoice number are required.");
+
+        var normalized = GetNormalizedInvoiceNumber(invoiceNumber);
+        var snapshot = await firestore.Collection("invoices")
+            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var matches = snapshot.Documents
+            .Where(document => string.Equals(
+                GetNormalizedInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
+                normalized,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var document in matches)
+            await document.Reference.DeleteAsync(cancellationToken: cancellationToken);
+
+        await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
+    }
+
     private async Task<List<InvoiceUploadMissingImage>> GetMissingInvoiceImageDetailsAsync(
         int storeNumber,
         IReadOnlyCollection<string> missingInvoiceKeys,

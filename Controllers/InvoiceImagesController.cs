@@ -118,6 +118,21 @@ public sealed class InvoiceImagesController(IInvoiceImageRepository repository) 
         return await GetLookup(0, invoiceNumber, cancellationToken);
     }
 
+    [HttpDelete("{storeNumber:int}/{invoiceNumber}")]
+    [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
+    public async Task<IActionResult> Delete(int storeNumber, string invoiceNumber, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.DeleteInvoiceImagesAsync(storeNumber, invoiceNumber, cancellationToken);
+            return Ok();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpPost]
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
     [RequestSizeLimit(25 * 1024 * 1024)]

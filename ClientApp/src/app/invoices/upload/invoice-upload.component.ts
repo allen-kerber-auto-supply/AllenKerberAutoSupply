@@ -164,6 +164,22 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     });
   }
 
+  deleteMissingInvoice(invoiceNumber: string) {
+    if (this.selectedStore <= 0 || !confirm(`Delete invoice ${invoiceNumber} and all of its images?`)) return;
+    this.http.delete(`/api/invoices/upload-reconciliation/${this.selectedStore}/invoice/${encodeURIComponent(invoiceNumber)}`).subscribe({
+      next: () => this.loadReconciliation(),
+      error: error => alert(error.error?.message || 'Unable to delete the selected invoice.')
+    });
+  }
+
+  deleteMissingImage(invoiceNumber: string) {
+    if (this.selectedStore <= 0 || !confirm(`Delete all images for invoice ${invoiceNumber}?`)) return;
+    this.http.delete(`/api/invoice-images/${this.selectedStore}/${encodeURIComponent(invoiceNumber)}`).subscribe({
+      next: () => this.loadReconciliation(),
+      error: error => alert(error.error?.message || 'Unable to delete the selected invoice images.')
+    });
+  }
+
   deleteMisread(item: MisreadBarcodeItem) {
     if (!confirm(`Delete the misread image "${item.fileName}"?`)) return;
     this.http.delete(`/api/invoices/misread-barcodes/${encodeURIComponent(item.id)}`).subscribe({

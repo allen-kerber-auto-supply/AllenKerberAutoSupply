@@ -451,6 +451,51 @@ public sealed class FirestoreInvoiceImageRepository(
         return finalObjectName;
     }
 
+    public async Task DeleteInvoiceImagesAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)
+    {
+        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
+            throw new ArgumentException("A store number and invoice number are required.");
+
+        var normalized = NormalizeInvoiceNumber(invoiceNumber);
+        var imageSnapshot = await firestore.Collection("invoice_images")
+            .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var matches = imageSnapshot.Documents
+            .Where(document => string.Equals(
+                NormalizeInvoiceNumber(document.ConvertTo<InvoiceImageLookup>().InvoiceNumber),
+                normalized,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var objects = matches.SelectMany(document =>
+        {
+            var lookup = document.ConvertTo<InvoiceImageLookup>();
+            return lookup.Pages.Select(page => (Bucket: page.BucketName, Name: page.ObjectName))
+                .Append((lookup.BucketName, lookup.ObjectName));
+        })
+        .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+        .Distinct()
+        .ToList();
+
+        foreach (var item in objects)
+        {
+            try
+            {
+                await storageClient.DeleteObjectAsync(
+                    string.IsNullOrWhiteSpace(item.Bucket) ? gcpOptions.Value.ImageBucket : item.Bucket,
+                    item.Name,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+            }
+        }
+
+        foreach (var document in matches)
+            await document.Reference.DeleteAsync(cancellationToken: cancellationToken);
+
+        await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
+    }
+
     public async Task ReassignInvoiceAsync(string currentInvoiceNumber, string newInvoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
     {
         var current = (currentInvoiceNumber ?? string.Empty).Trim();

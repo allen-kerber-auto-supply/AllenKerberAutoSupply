@@ -65,6 +65,22 @@ public sealed class InvoicesController(
         return Ok(await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken));
     }
 
+    [HttpDelete("upload-reconciliation/{storeNumber:int}/invoice/{invoiceNumber}")]
+    [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
+    public async Task<IActionResult> DeleteInvoice(int storeNumber, string invoiceNumber, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await invoiceImageRepository.DeleteInvoiceImagesAsync(storeNumber, invoiceNumber, cancellationToken);
+            await repository.DeleteInvoiceAsync(storeNumber, invoiceNumber, cancellationToken);
+            return Ok();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpGet("progress")]
     [AllowAnonymous]
     public IActionResult GetProgress([FromQuery] string operation = "excel")
