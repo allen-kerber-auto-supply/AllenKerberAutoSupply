@@ -9,3 +9,13 @@
 	padding: 0;
 	text-decoration: underline;
 }
+
+.missing-invoice-row {
+	align-items: center;
+	display: flex;
+	gap: 0.5rem;
+}
+
+.missing-invoice-row input {
+	max-width: 10rem;
+}

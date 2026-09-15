@@ -44,3 +44,10 @@ public sealed class InvoiceUploadMissingImage
     public string CustomerName { get; set; } = string.Empty;
     public double InvoiceAmount { get; set; }
 }
+
+public sealed class InvoiceImageReassignment
+{
+    public int StoreNumber { get; set; }
+    public string CurrentInvoiceNumber { get; set; } = string.Empty;
+    public string NewInvoiceNumber { get; set; } = string.Empty;
+}

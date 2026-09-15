@@ -103,7 +103,14 @@ public sealed class FirestoreInvoiceRepository(
 
     private static string GetNormalizedInvoiceNumber(string? invoiceNumber)
     {
-        return (invoiceNumber ?? string.Empty).Trim();
+        var value = (invoiceNumber ?? string.Empty).Trim();
+        if (value.Length == 0 || !value.All(char.IsDigit))
+        {
+            return value;
+        }
+
+        var withoutLeadingZeros = value.TrimStart('0');
+        return withoutLeadingZeros.Length == 0 ? "0" : withoutLeadingZeros;
     }
 
     private static void RecomputeUploadState(StoreUploadState state)
@@ -295,8 +302,15 @@ public sealed class FirestoreInvoiceRepository(
         string normalized = (invoiceNumber ?? string.Empty).Trim();
         string docId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoices").Document(docId);
-        var imageSnapshot = await firestore.Collection("invoice_images").Document(docId).GetSnapshotAsync(cancellationToken);
-        var existingImage = imageSnapshot.Exists ? imageSnapshot.ConvertTo<InvoiceImageLookup>() : null;
+        var imageSnapshot = await firestore.Collection("invoice_images")
+            .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var existingImage = imageSnapshot.Documents
+            .Select(document => document.ConvertTo<InvoiceImageLookup>())
+            .FirstOrDefault(image => string.Equals(
+                GetNormalizedInvoiceNumber(image.InvoiceNumber),
+                GetNormalizedInvoiceNumber(normalized),
+                StringComparison.OrdinalIgnoreCase));
 
         var customerDoc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
         string customerName = customerDoc.Exists && customerDoc.TryGetValue("CustomerName", out string name) ? name : string.Empty;

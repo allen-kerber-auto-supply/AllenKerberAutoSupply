@@ -29,6 +29,18 @@ public sealed class FirestoreInvoiceImageRepository(
             var rawDoc = await GetDocumentSnapshotAsync("invoice_images", rawDocId, cancellationToken);
             if (rawDoc?.Exists == true)
                 return rawDoc.ConvertTo<InvoiceImageLookup>();
+
+            var storeImages = await firestore.Collection("invoice_images")
+                .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+                .GetSnapshotAsync(cancellationToken);
+            var matchingImage = storeImages.Documents
+                .Select(document => document.ConvertTo<InvoiceImageLookup>())
+                .FirstOrDefault(image => string.Equals(
+                    NormalizeInvoiceNumber(image.InvoiceNumber),
+                    NormalizeInvoiceNumber(raw),
+                    StringComparison.OrdinalIgnoreCase));
+            if (matchingImage is not null)
+                return matchingImage;
         }
 
         // Search across all stores by invoice number in Firestore invoice_images collection
@@ -416,11 +428,17 @@ public sealed class FirestoreInvoiceImageRepository(
         await reconciliationStore.ReconcileImageAsync(storeNumber, normalized, cancellationToken);
 
         // Update HasImages flag in invoices collection if invoice exists
-        var invoiceRef = firestore.Collection("invoices").Document($"{storeNumber}_{normalized}");
-        var invDoc = await invoiceRef.GetSnapshotAsync(cancellationToken);
-        if (invDoc.Exists)
+        var invoiceSnapshot = await firestore.Collection("invoices")
+            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var invoiceDocument = invoiceSnapshot.Documents.FirstOrDefault(document =>
+            string.Equals(
+                NormalizeInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
+                NormalizeInvoiceNumber(normalized),
+                StringComparison.OrdinalIgnoreCase));
+        if (invoiceDocument is not null)
         {
-            await invoiceRef.UpdateAsync(new Dictionary<string, object>
+            await invoiceDocument.Reference.UpdateAsync(new Dictionary<string, object>
             {
                 { nameof(Invoice.HasImages), true },
                 { nameof(Invoice.ImageObjectName), $"invoices/{storeNumber}/{normalized}/page_1.png" }
@@ -428,5 +446,66 @@ public sealed class FirestoreInvoiceImageRepository(
         }
 
         return finalObjectName;
+    }
+
+    public async Task ReassignInvoiceAsync(string currentInvoiceNumber, string newInvoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
+    {
+        var current = (currentInvoiceNumber ?? string.Empty).Trim();
+        var replacement = (newInvoiceNumber ?? string.Empty).Trim();
+        if (storeNumber <= 0 || current.Length == 0 || replacement.Length == 0)
+            throw new ArgumentException("A store number and both invoice numbers are required.");
+
+        var imageSnapshot = await firestore.Collection("invoice_images")
+            .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var sourceDocument = imageSnapshot.Documents.FirstOrDefault(document =>
+            string.Equals(NormalizeInvoiceNumber(document.ConvertTo<InvoiceImageLookup>().InvoiceNumber), NormalizeInvoiceNumber(current), StringComparison.OrdinalIgnoreCase));
+        if (sourceDocument is null)
+            throw new InvalidOperationException($"No image was found for invoice {current}.");
+
+        var targetDocumentId = $"{storeNumber}_{replacement}";
+        var targetReference = firestore.Collection("invoice_images").Document(targetDocumentId);
+        var targetSnapshot = await targetReference.GetSnapshotAsync(cancellationToken);
+        if (targetSnapshot.Exists && targetSnapshot.Id != sourceDocument.Id)
+            throw new InvalidOperationException($"An image already exists for invoice {replacement}.");
+
+        var lookup = sourceDocument.ConvertTo<InvoiceImageLookup>();
+        lookup.InvoiceNumber = replacement;
+        await firestore.RunTransactionAsync(async transaction =>
+        {
+            transaction.Set(targetReference, lookup);
+            if (sourceDocument.Id != targetReference.Id)
+                transaction.Delete(sourceDocument.Reference);
+            await Task.CompletedTask;
+        }, cancellationToken: cancellationToken);
+
+        var invoiceSnapshot = await firestore.Collection("invoices")
+            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var invoiceDocument = invoiceSnapshot.Documents.FirstOrDefault(document =>
+            string.Equals(
+                NormalizeInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
+                NormalizeInvoiceNumber(replacement),
+                StringComparison.OrdinalIgnoreCase));
+        if (invoiceDocument is not null)
+        {
+            await invoiceDocument.Reference.UpdateAsync(new Dictionary<string, object>
+            {
+                { nameof(Invoice.HasImages), true },
+                { nameof(Invoice.ImageObjectName), lookup.ObjectName }
+            }, cancellationToken: cancellationToken);
+        }
+
+        await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
+    }
+
+    private static string NormalizeInvoiceNumber(string? invoiceNumber)
+    {
+        var value = (invoiceNumber ?? string.Empty).Trim();
+        if (value.Length == 0 || !value.All(char.IsDigit))
+            return value;
+
+        var withoutLeadingZeros = value.TrimStart('0');
+        return withoutLeadingZeros.Length == 0 ? "0" : withoutLeadingZeros;
     }
 }

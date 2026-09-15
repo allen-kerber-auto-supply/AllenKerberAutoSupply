@@ -7,12 +7,12 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
 {
     public Task ReconcileInvoiceAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)
     {
-        return ReconcileKeyAsync(storeNumber, invoiceNumber, isInvoice: true, cancellationToken);
+        return ReconcileStoreAsync(storeNumber, cancellationToken);
     }
 
     public Task ReconcileImageAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)
     {
-        return ReconcileKeyAsync(storeNumber, invoiceNumber, isInvoice: false, cancellationToken);
+        return ReconcileStoreAsync(storeNumber, cancellationToken);
     }
 
     public async Task<InvoiceUploadReconciliation> ReconcileStoreAsync(int storeNumber, CancellationToken cancellationToken = default)
@@ -45,51 +45,6 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
         await storeRef.SetAsync(new StoreRecord { StoreNumber = storeNumber, UploadState = state }, cancellationToken: cancellationToken);
 
         return CreateResponse(state, invoiceSnapshot.Documents.Select(document => document.ConvertTo<Invoice>()));
-    }
-
-    private async Task ReconcileKeyAsync(int storeNumber, string invoiceNumber, bool isInvoice, CancellationToken cancellationToken)
-    {
-        var normalized = Normalize(invoiceNumber);
-        if (storeNumber <= 0 || normalized.Length == 0)
-        {
-            return;
-        }
-
-        var storeRef = firestore.Collection("stores").Document(storeNumber.ToString());
-        var invoiceRef = firestore.Collection("invoices").Document($"{storeNumber}_{normalized}");
-        var imageRef = firestore.Collection("invoice_images").Document($"{storeNumber}_{normalized}");
-
-        await firestore.RunTransactionAsync(async transaction =>
-        {
-            var storeSnapshot = await transaction.GetSnapshotAsync(storeRef);
-            var invoiceSnapshot = await transaction.GetSnapshotAsync(invoiceRef);
-            var imageSnapshot = await transaction.GetSnapshotAsync(imageRef);
-            var storeRecord = storeSnapshot.Exists
-                ? storeSnapshot.ConvertTo<StoreRecord>()
-                : new StoreRecord { StoreNumber = storeNumber };
-            var state = storeRecord.UploadState ?? new StoreUploadState();
-            state.InvoiceKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            state.ImageKeys ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
-            UpdateMembership(state.InvoiceKeys, normalized, invoiceSnapshot.Exists);
-            UpdateMembership(state.ImageKeys, normalized, imageSnapshot.Exists);
-            Recompute(state);
-            storeRecord.StoreNumber = storeNumber;
-            storeRecord.UploadState = state;
-            transaction.Set(storeRef, storeRecord);
-        }, cancellationToken: cancellationToken);
-    }
-
-    private static void UpdateMembership(Dictionary<string, bool> keys, string invoiceNumber, bool exists)
-    {
-        if (exists)
-        {
-            keys[invoiceNumber] = true;
-        }
-        else
-        {
-            keys.Remove(invoiceNumber);
-        }
     }
 
     private static StoreUploadState CreateState(HashSet<string> invoiceKeys, HashSet<string> imageKeys)
@@ -133,5 +88,15 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
         };
     }
 
-    private static string Normalize(string? invoiceNumber) => (invoiceNumber ?? string.Empty).Trim();
+    private static string Normalize(string? invoiceNumber)
+    {
+        var value = (invoiceNumber ?? string.Empty).Trim();
+        if (value.Length == 0 || !value.All(char.IsDigit))
+        {
+            return value;
+        }
+
+        var withoutLeadingZeros = value.TrimStart('0');
+        return withoutLeadingZeros.Length == 0 ? "0" : withoutLeadingZeros;
+    }
 }

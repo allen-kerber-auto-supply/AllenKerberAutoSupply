@@ -25,6 +25,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   imagesProgress = 0;
   reconciliation: InvoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
   missingImageDetails: InvoiceUploadMissingImage[] = [];
+  missingInvoiceDrafts: Record<string, string> = {};
   misreadBarcodes: MisreadBarcodeItem[] = [];
   drafts: Record<string, { invoiceNumber: string; storeNumber: number }> = {};
   private excelTimer: number | null = null;
@@ -59,6 +60,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.http.get<InvoiceUploadReconciliation>(`/api/invoices/upload-reconciliation?storeNumber=${this.selectedStore}`).subscribe({
       next: result => {
         this.reconciliation = result || { missingInvoiceImages: [], missingInvoices: [] };
+        this.missingInvoiceDrafts = Object.fromEntries(
+          this.reconciliation.missingInvoices.map(invoiceNumber => [invoiceNumber, invoiceNumber]));
         const details = this.reconciliation.missingInvoiceImages.filter((item): item is InvoiceUploadMissingImage => typeof item !== 'string');
         const keys = this.reconciliation.missingInvoiceImageKeys || this.reconciliation.missingInvoiceImages.filter((item): item is string => typeof item === 'string');
         this.loadMissingDetails(details, keys);
@@ -146,6 +149,21 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
       customerNumber: 0,
       customerName: '',
       invoiceAmount: 0
+    });
+  }
+
+  reassignMissingInvoice(invoiceNumber: string) {
+    const replacement = (this.missingInvoiceDrafts[invoiceNumber] || '').trim();
+    if (!replacement || this.selectedStore <= 0) return;
+    if (replacement === invoiceNumber.trim()) return;
+
+    this.http.post('/api/invoice-images/reassign', {
+      storeNumber: this.selectedStore,
+      currentInvoiceNumber: invoiceNumber,
+      newInvoiceNumber: replacement
+    }).subscribe({
+      next: () => this.loadReconciliation(),
+      error: error => alert(error.error?.message || 'Unable to update the invoice number for this image.')
     });
   }
 

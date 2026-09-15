@@ -1,4 +1,5 @@
 using AllenKerberAutoSupply.Data;
+using AllenKerberAutoSupply.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SixLabors.ImageSharp;
@@ -153,6 +154,29 @@ public sealed class InvoiceImagesController(IInvoiceImageRepository repository) 
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("reassign")]
+    [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
+    public async Task<IActionResult> Reassign([FromBody] InvoiceImageReassignment request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.ReassignInvoiceAsync(
+                request.CurrentInvoiceNumber,
+                request.NewInvoiceNumber,
+                request.StoreNumber,
+                cancellationToken);
+            return Ok();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
         }
     }
 }
