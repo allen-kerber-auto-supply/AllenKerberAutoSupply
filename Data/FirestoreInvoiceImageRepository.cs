@@ -470,7 +470,7 @@ public sealed class FirestoreInvoiceImageRepository(
         {
             var lookup = document.ConvertTo<InvoiceImageLookup>();
             return lookup.Pages.Select(page => (Bucket: page.BucketName, Name: page.ObjectName))
-                .Append((lookup.BucketName, lookup.ObjectName));
+                .Append((Bucket: lookup.BucketName, Name: lookup.ObjectName));
         })
         .Where(item => !string.IsNullOrWhiteSpace(item.Name))
         .Distinct()
