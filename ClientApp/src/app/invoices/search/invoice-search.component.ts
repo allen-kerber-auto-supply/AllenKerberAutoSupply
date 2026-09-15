@@ -113,6 +113,11 @@ export class InvoiceSearchComponent {
     return this.invoices.filter(invoice => this.isSelected(invoice));
   }
 
+  selectInvoice(invoice: Invoice) {
+    if (invoice.hasImages === false) return;
+    this.invoiceSelected.emit(invoice);
+  }
+
   onResultsScroll(event: Event) {
     const element = event.target as HTMLElement;
     if (!this.loading && this.hasMore && element.scrollTop + element.clientHeight >= element.scrollHeight - 160) {

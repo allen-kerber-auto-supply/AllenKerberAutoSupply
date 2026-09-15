@@ -6,7 +6,7 @@
         <span *ngIf="customer">{{customer}}</span>
         <span *ngIf="customerNumber"> (#{{customerNumber}})</span>
         <span *ngIf="customer || customerNumber"> &bull; </span>
-        <span *ngIf="invoices.length === 1">{{invoiceViews[0]?.pages?.length || 0}} page{{invoiceViews[0]?.pages?.length === 1 ? '' : 's'}}</span>
+        <span *ngIf="invoices.length === 1">{{invoiceViews.length ? invoiceViews[0].pages.length : 0}} page{{invoiceViews.length && invoiceViews[0].pages.length === 1 ? '' : 's'}}</span>
         <span *ngIf="invoices.length > 1">{{invoices.length}} invoices</span>
       </p>
     </div>
