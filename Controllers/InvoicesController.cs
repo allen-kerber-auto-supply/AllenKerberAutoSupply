@@ -23,6 +23,7 @@ namespace AllenKerberAutoSupply.Controllers;
 [Authorize(Policy = AuthorizationPolicies.ActiveAccount, Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser}")]
 public sealed class InvoicesController(
     IInvoiceRepository repository,
+    ICustomerRepository customerRepository,
     IInvoiceImageRepository invoiceImageRepository,
     IInvoiceStoreCache invoiceStoreCache,
     IUploadProgressEventBus uploadProgressEventBus,
@@ -265,6 +266,7 @@ public sealed class InvoicesController(
         }
 
         var customerNo = ParseInt(GetRowValue(row, "customer_no", "customerNo", "customer number", "customer number ", "customernumber")) ?? 0;
+        var customer = GetCustomerFromRow(row, customerNo);
         var invoiceDate = ParseDate(GetRowValue(row, "invoice_date", "invoiceDate", "date", "invoicedate")) ?? DateTime.UtcNow;
         var amount = ParseDecimal(GetRowValue(row, "invoice_amount", "invoiceAmount", "amount", "invoice total", "invoicetotal")) ?? 0m;
         var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
@@ -283,6 +285,9 @@ public sealed class InvoicesController(
 
         try
         {
+            if (customer is not null)
+                await customerRepository.EnsureCustomerAsync(customer, cancellationToken);
+
             await repository.UpsertInvoiceDataAsync(
                 customerNo,
                 invoiceValue,
@@ -300,6 +305,58 @@ public sealed class InvoicesController(
         {
             return (false, $"Unable to import invoice {invoiceValue}: {ex.Message}");
         }
+    }
+
+    private static FirestoreCustomer? GetCustomerFromRow(Dictionary<string, string> row, int customerNumber)
+    {
+        if (customerNumber <= 0)
+            return null;
+
+        var customerName = GetRowValue(row, "customer_name", "customerName", "customer name", "customer", "account name", "accountName");
+        var vendorId = GetRowValue(row, "vendor_id", "vendorId", "vendor number", "vendor");
+        var statementOrInvoice = GetRowValue(row, "statement_or_invoice", "statementOrInvoice", "statement or invoice", "statement invoice", "statement_invoice");
+        var address1 = GetRowValue(row, "address1", "address_1", "address 1", "address");
+        var address2 = GetRowValue(row, "address2", "address_2", "address 2");
+        var city = GetRowValue(row, "city");
+        var state = GetRowValue(row, "state");
+        var zip = GetRowValue(row, "zip", "zipcode", "zip code", "postal code");
+        var emails = GetRowValue(row, "email", "email address", "emails")?
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList() ?? [];
+        var showPoValue = GetRowValue(row, "show_po", "showPo", "show po", "show po number", "show_po_number", "showPoNumber");
+
+        if (string.IsNullOrWhiteSpace(customerName)
+            && string.IsNullOrWhiteSpace(vendorId)
+            && string.IsNullOrWhiteSpace(statementOrInvoice)
+            && string.IsNullOrWhiteSpace(address1)
+            && string.IsNullOrWhiteSpace(address2)
+            && string.IsNullOrWhiteSpace(city)
+            && string.IsNullOrWhiteSpace(state)
+            && string.IsNullOrWhiteSpace(zip)
+            && emails.Count == 0
+            && !bool.TryParse(showPoValue, out _))
+        {
+            return new FirestoreCustomer
+            {
+                CustomerNumber = customerNumber,
+                CustomerName = string.Empty
+            };
+        }
+
+        return new FirestoreCustomer
+        {
+            CustomerNumber = customerNumber,
+            CustomerName = customerName ?? string.Empty,
+            VendorId = vendorId ?? string.Empty,
+            StatementOrInvoice = statementOrInvoice ?? "I",
+            Address1 = address1 ?? string.Empty,
+            Address2 = address2 ?? string.Empty,
+            City = city ?? string.Empty,
+            State = state ?? string.Empty,
+            Zip = zip ?? string.Empty,
+            Emails = emails,
+            ShowPo = bool.TryParse(showPoValue, out var showPo) && showPo
+        };
     }
 
     [HttpPost("upload-images")]

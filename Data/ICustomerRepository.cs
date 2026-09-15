@@ -7,6 +7,7 @@ public interface ICustomerRepository
     Task<IReadOnlyList<CustomerSummary>> GetInvoiceCustomerListAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FirestoreCustomer>> GetAdminCustomerListAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetCustomerEmailListAsync(int customerNumber, CancellationToken cancellationToken = default);
+    Task<bool> EnsureCustomerAsync(FirestoreCustomer customer, CancellationToken cancellationToken = default);
     Task<bool> InsertCustomerAsync(FirestoreCustomer customer, CancellationToken cancellationToken = default);
     Task<bool> UpdateCustomerAsync(int customerNumber, FirestoreCustomer customer, CancellationToken cancellationToken = default);
     Task<UserInfoResult?> GetUserInfoAsync(string userName, CancellationToken cancellationToken = default);

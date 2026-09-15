@@ -18,7 +18,6 @@ export class CustomerAdminComponent implements OnInit {
   filterText = '';
   visibleCount = this.pageSize;
   selectedCustomer: FirestoreCustomer | null = null;
-  isAdding = false;
   form: FirestoreCustomer = this.emptyCustomer();
   emailsText = '';
   loading = false;
@@ -71,25 +70,16 @@ export class CustomerAdminComponent implements OnInit {
     this.visibleCount = this.pageSize;
   }
 
-  private getNextCustomerNumber(): number {
-    return this.customers.reduce((highest, customer) => Math.max(highest, customer.customerNumber || 0), 0) + 1;
-  }
-
-  startAdd(): void {
-    this.selectedCustomer = null;
-    this.isAdding = true;
-    this.form = this.emptyCustomer();
-    this.form.customerNumber = this.getNextCustomerNumber();
-    this.emailsText = '';
+  startEdit(customer: FirestoreCustomer): void {
+    this.selectedCustomer = customer;
+    this.form = { ...customer, emails: [...(customer.emails || [])] };
+    this.emailsText = (customer.emails || []).join('\n');
     this.message = '';
     this.error = '';
   }
 
-  startEdit(customer: FirestoreCustomer): void {
-    this.selectedCustomer = customer;
-    this.isAdding = false;
-    this.form = { ...customer, emails: [...(customer.emails || [])] };
-    this.emailsText = (customer.emails || []).join('\n');
+  cancelEdit(): void {
+    this.selectedCustomer = null;
     this.message = '';
     this.error = '';
   }
@@ -104,15 +94,14 @@ export class CustomerAdminComponent implements OnInit {
     }
 
     this.saving = true;
-    const request = this.selectedCustomer
-      ? this.http.put<FirestoreCustomer>(`/api/customers/${this.selectedCustomer.customerNumber}`, this.form)
-      : this.http.post('/api/customers', this.form);
+    if (!this.selectedCustomer) return;
+
+    const request = this.http.put<FirestoreCustomer>(`/api/customers/${this.selectedCustomer.customerNumber}`, this.form);
     request.subscribe({
       next: () => {
         this.saving = false;
-        this.message = this.selectedCustomer ? 'Customer updated.' : 'Customer added.';
+        this.message = 'Customer updated.';
         this.loadCustomers();
-        if (!this.selectedCustomer) this.startAdd();
       },
       error: response => { this.saving = false; this.error = this.getErrorMessage(response, 'Unable to save customer.'); }
     });

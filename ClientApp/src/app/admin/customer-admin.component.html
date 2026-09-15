@@ -1,7 +1,6 @@
 <section class="workspace customer-admin-workspace">
   <div class="heading">
     <div><p class="eyebrow">Invoice Administration</p><h1>Invoice Customers</h1><p>Maintain customer details used for invoices and statements.</p></div>
-    <button class="button secondary" type="button" (click)="startAdd()">Add Customer</button>
   </div>
 
   <div class="customer-admin-grid">
@@ -21,8 +20,8 @@
       <p *ngIf="filteredCustomers.length > visibleCustomers.length" class="list-count">Showing {{visibleCustomers.length}} of {{filteredCustomers.length}}</p>
     </div>
 
-    <form *ngIf="selectedCustomer || isAdding" class="card customer-form" (ngSubmit)="save()">
-      <div><p class="eyebrow">{{selectedCustomer ? 'Edit account' : 'New account'}}</p><h2>{{selectedCustomer ? selectedCustomer.customerName : 'Add a customer'}}</h2></div>
+    <form *ngIf="selectedCustomer" class="card customer-form" (ngSubmit)="save()">
+      <div><p class="eyebrow">Edit account</p><h2>{{selectedCustomer.customerName}}</h2></div>
       <div class="form-grid-2">
         <label>Customer name<input [(ngModel)]="form.customerName" name="customerName" required></label>
         <label>Vendor ID<input [(ngModel)]="form.vendorId" name="vendorId"></label>
@@ -35,7 +34,7 @@
         <label>ZIP<input [(ngModel)]="form.zip" name="zip"></label>
          <label>Email addresses<textarea [(ngModel)]="emailsText" name="emails" rows="2"></textarea><span class="input-hint">One per line or separated by commas.</span></label>
       </div>
-      <div class="form-actions"><button class="button secondary" type="button" (click)="startAdd()" *ngIf="selectedCustomer">Cancel</button><button class="button primary" type="submit" [disabled]="saving">{{saving ? 'Saving...' : selectedCustomer ? 'Save changes' : 'Add customer'}}</button></div>
+      <div class="form-actions"><button class="button secondary" type="button" (click)="cancelEdit()">Cancel</button><button class="button primary" type="submit" [disabled]="saving">{{saving ? 'Saving...' : 'Save changes'}}</button></div>
       <p *ngIf="message" class="notice success">{{message}}</p><p *ngIf="error" class="notice alert">{{error}}</p>
     </form>
   </div>

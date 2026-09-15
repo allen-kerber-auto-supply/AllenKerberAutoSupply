@@ -39,6 +39,21 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
         return customer.Emails;
     }
 
+    public async Task<bool> EnsureCustomerAsync(FirestoreCustomer customer, CancellationToken cancellationToken = default)
+    {
+        if (customer.CustomerNumber <= 0)
+            return false;
+
+        var docRef = firestore.Collection("customers").Document(customer.CustomerNumber.ToString());
+        var doc = await docRef.GetSnapshotAsync(cancellationToken);
+        if (doc.Exists)
+            return false;
+
+        Normalize(customer);
+        await docRef.CreateAsync(customer, cancellationToken);
+        return true;
+    }
+
     public async Task<bool> InsertCustomerAsync(FirestoreCustomer customer, CancellationToken cancellationToken = default)
     {
         var docRef = firestore.Collection("customers").Document(customer.CustomerNumber.ToString());
