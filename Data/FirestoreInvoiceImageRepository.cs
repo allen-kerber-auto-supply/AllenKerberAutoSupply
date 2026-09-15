@@ -458,8 +458,13 @@ public sealed class FirestoreInvoiceImageRepository(
         var imageSnapshot = await firestore.Collection("invoice_images")
             .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
             .GetSnapshotAsync(cancellationToken);
-        var sourceDocument = imageSnapshot.Documents.FirstOrDefault(document =>
-            string.Equals(NormalizeInvoiceNumber(document.ConvertTo<InvoiceImageLookup>().InvoiceNumber), NormalizeInvoiceNumber(current), StringComparison.OrdinalIgnoreCase));
+        var sourceDocuments = imageSnapshot.Documents
+            .Where(document => string.Equals(
+                NormalizeInvoiceNumber(document.ConvertTo<InvoiceImageLookup>().InvoiceNumber),
+                NormalizeInvoiceNumber(current),
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var sourceDocument = sourceDocuments.FirstOrDefault();
         if (sourceDocument is null)
             throw new InvalidOperationException($"No image was found for invoice {current}.");
 
@@ -474,8 +479,11 @@ public sealed class FirestoreInvoiceImageRepository(
         await firestore.RunTransactionAsync(async transaction =>
         {
             transaction.Set(targetReference, lookup);
-            if (sourceDocument.Id != targetReference.Id)
-                transaction.Delete(sourceDocument.Reference);
+            foreach (var document in sourceDocuments)
+            {
+                if (document.Id != targetReference.Id)
+                    transaction.Delete(document.Reference);
+            }
             await Task.CompletedTask;
         }, cancellationToken: cancellationToken);
 
