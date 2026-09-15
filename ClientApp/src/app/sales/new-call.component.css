@@ -4,6 +4,33 @@
 
 .form-card, .history-sidebar { min-width: 0; }
 
+.contact-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.contact-input-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.contact-save-button {
+  flex: 0 0 2.35rem;
+  width: 2.35rem;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.save-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: block;
+}
+
 .call-timing-grid {
   grid-template-areas:
     "date date"

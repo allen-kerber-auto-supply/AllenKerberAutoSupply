@@ -13,7 +13,7 @@
           <span *ngIf="newCall.accountName && isAssignedSalesCustomer(newCall.accountName)" class="status-badge customer">Assigned Customer</span>
         </div>
       </div>
-      <div class="form-grid-2"><label>Contact Name<input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person"></label><label>Phone Number<input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000"></label></div>
+      <div class="form-grid-2"><label>Contact Name<div class="contact-input-row"><input [(ngModel)]="newCall.contactName" name="contactName" placeholder="Primary contact person"><button *ngIf="newCall.accountName && !isAccountProspect(newCall.accountName)" class="button secondary contact-save-button" type="button" (click)="saveCustomerContact('contactName')" [disabled]="savingCustomerContact || !(newCall.contactName || '').trim()" title="Save default contact name" aria-label="Save default contact name">💾</button></div></label><label>Phone Number<div class="contact-input-row"><input [(ngModel)]="newCall.phone" name="phone" type="tel" placeholder="(555) 000-0000"><button *ngIf="newCall.accountName && !isAccountProspect(newCall.accountName)" class="button secondary contact-save-button" type="button" (click)="saveCustomerContact('contactPhone')" [disabled]="savingCustomerContact || !(newCall.phone || '').trim()" title="Save default phone number" aria-label="Save default phone number">💾</button></div></label></div>
       <div class="form-grid-2 call-timing-grid">
         <label class="call-date-field">Call Date *<input type="date" [(ngModel)]="newCall.callDate" name="callDate" required></label>
         <label class="call-time-field">Call Time *

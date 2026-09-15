@@ -105,6 +105,8 @@ export interface SalesCustomer {
   customerNumber?: number;
   customerName?: string;
   accountName?: string;
+  contactName?: string;
+  contactPhone?: string;
   guid?: string;
   assignedSalesReps?: string[];
   repEmail?: string;

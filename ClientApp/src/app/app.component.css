@@ -178,6 +178,9 @@
   .btn-group { display: flex; gap: 0.4rem; }
   .form-card, .sales-admin-card { padding: 1.5rem; }
   .sales-admin-card { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
+  .sales-admin-customers { grid-column: 1; grid-row: 1; }
+  .sales-admin-reps { grid-column: 2; grid-row: 1; }
+  .sales-admin-assignments { grid-column: 1 / -1; grid-row: 2; }
   .sales-admin-card h2 { margin: 0 0 0.2rem; font-size: 1.25rem; }
   .sales-admin-form { display: grid; gap: 0.8rem; margin-top: 1rem; }
   .sales-admin-form label,
@@ -186,7 +189,7 @@
   .sales-admin-form button,
   .admin-table-filters input,
   .admin-table-filters select { width: 100%; max-width: 100%; box-sizing: border-box; }
-  @media(max-width:980px){.admin-grid,.new-call-layout{grid-template-columns:1fr}} 
+  @media(max-width:980px){.admin-grid,.new-call-layout{grid-template-columns:1fr}.sales-admin-customers,.sales-admin-reps,.sales-admin-assignments{grid-column:1;grid-row:auto}} 
   .modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 1.25rem; }
 
   @media print {

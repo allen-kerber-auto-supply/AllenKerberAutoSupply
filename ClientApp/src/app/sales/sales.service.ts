@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AccountSummary, PagedSalesCalls, SalesCall } from '../shared/models';
+import { AccountSummary, PagedSalesCalls, SalesCall, SalesCustomer } from '../shared/models';
 
 @Injectable({ providedIn: 'root' })
 export class SalesService {
@@ -60,6 +60,18 @@ export class SalesService {
 
   assignCustomer(customerName: string, repEmail: string) {
     return this.http.post('/api/sales/assignments', { customerName, repEmail });
+  }
+
+  updateCustomer(customer: Pick<SalesCustomer, 'customerNumber' | 'customerName' | 'contactName' | 'contactPhone'>) {
+    return this.http.put(`/api/sales/customers/${customer.customerNumber}`, {
+      customerName: customer.customerName,
+      contactName: customer.contactName || '',
+      contactPhone: customer.contactPhone || ''
+    });
+  }
+
+  mergeCustomers(survivingCustomerNumber: number, duplicateCustomerNumber: number) {
+    return this.http.post('/api/sales/customers/merge', { survivingCustomerNumber, duplicateCustomerNumber });
   }
 
   unassignCustomer(customerName: string, repEmail: string) {

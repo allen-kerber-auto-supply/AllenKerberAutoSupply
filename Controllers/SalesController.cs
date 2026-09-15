@@ -76,8 +76,24 @@ public sealed class SalesController(ISalesRepository repository) : ControllerBas
         if (string.IsNullOrWhiteSpace(request.CustomerName))
             return BadRequest("Customer name is required.");
 
-        var success = await repository.InsertSalesCustomerAsync(request.CustomerName, cancellationToken);
+        var success = await repository.InsertSalesCustomerAsync(request.CustomerName, request.ContactName, request.ContactPhone, cancellationToken);
         return success ? Ok(new { message = "Sales customer added successfully." }) : Conflict("Customer already exists.");
+    }
+
+    [HttpPut("customers/{customerNumber:int}")]
+    [Authorize(Roles = RoleNames.SalesAdmin)]
+    public async Task<IActionResult> UpdateSalesCustomer(int customerNumber, [FromBody] UpdateSalesCustomerRequest request, CancellationToken cancellationToken)
+    {
+        var success = await repository.UpdateSalesCustomerAsync(customerNumber, request.CustomerName, request.ContactName, request.ContactPhone, cancellationToken);
+        return success ? Ok(new { message = "Sales customer updated successfully." }) : Conflict("Customer not found or the account name is already in use.");
+    }
+
+    [HttpPost("customers/merge")]
+    [Authorize(Roles = RoleNames.SalesAdmin)]
+    public async Task<IActionResult> MergeSalesCustomers([FromBody] MergeSalesCustomersRequest request, CancellationToken cancellationToken)
+    {
+        var success = await repository.MergeSalesCustomersAsync(request.SurvivingCustomerNumber, request.DuplicateCustomerNumber, cancellationToken);
+        return success ? Ok(new { message = "Sales customers merged successfully." }) : BadRequest("Both customers must exist and be different accounts.");
     }
 
     [HttpDelete("customers/{customerName}")]
@@ -278,6 +294,21 @@ public sealed class CreateSalesRepRequest
 public sealed class CreateSalesCustomerRequest
 {
     public string CustomerName { get; set; } = string.Empty;
+    public string ContactName { get; set; } = string.Empty;
+    public string ContactPhone { get; set; } = string.Empty;
+}
+
+public sealed class UpdateSalesCustomerRequest
+{
+    public string CustomerName { get; set; } = string.Empty;
+    public string ContactName { get; set; } = string.Empty;
+    public string ContactPhone { get; set; } = string.Empty;
+}
+
+public sealed class MergeSalesCustomersRequest
+{
+    public int SurvivingCustomerNumber { get; set; }
+    public int DuplicateCustomerNumber { get; set; }
 }
 
 public sealed class AccountAssignmentRequest

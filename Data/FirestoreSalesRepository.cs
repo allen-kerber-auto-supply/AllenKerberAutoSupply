@@ -82,6 +82,22 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             customer.CustomerName = nameObj?.ToString()?.Trim() ?? string.Empty;
         }
 
+        if (data.TryGetValue("ContactName", out var contactNameObj) ||
+            data.TryGetValue("contact_name", out contactNameObj) ||
+            data.TryGetValue("Contact_Name", out contactNameObj))
+        {
+            customer.ContactName = contactNameObj?.ToString()?.Trim() ?? string.Empty;
+        }
+
+        if (data.TryGetValue("ContactPhone", out var contactPhoneObj) ||
+            data.TryGetValue("contact_phone", out contactPhoneObj) ||
+            data.TryGetValue("Contact_Phone", out contactPhoneObj) ||
+            data.TryGetValue("Phone", out contactPhoneObj) ||
+            data.TryGetValue("phone", out contactPhoneObj))
+        {
+            customer.ContactPhone = contactPhoneObj?.ToString()?.Trim() ?? string.Empty;
+        }
+
         if (data.TryGetValue("Guid", out var guidObj) ||
             data.TryGetValue("guid", out guidObj))
         {
@@ -394,7 +410,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             .ToList();
     }
 
-    public async Task<bool> InsertSalesCustomerAsync(string customerName, CancellationToken cancellationToken = default)
+    public async Task<bool> InsertSalesCustomerAsync(string customerName, string contactName, string contactPhone, CancellationToken cancellationToken = default)
     {
         string name = (customerName ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -419,11 +435,79 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         {
             CustomerNumber = nextId,
             CustomerName = name,
+            ContactName = (contactName ?? string.Empty).Trim(),
+            ContactPhone = (contactPhone ?? string.Empty).Trim(),
             Guid = Guid.NewGuid().ToString(),
             AssignedSalesReps = []
         };
 
         await docRef.SetAsync(customer, cancellationToken: cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> UpdateSalesCustomerAsync(int customerNumber, string customerName, string contactName, string contactPhone, CancellationToken cancellationToken = default)
+    {
+        if (customerNumber <= 0 || string.IsNullOrWhiteSpace(customerName))
+            return false;
+
+        var doc = await firestore.Collection("sales_customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
+        if (!doc.Exists)
+            return false;
+
+        var duplicate = (await firestore.Collection("sales_customers").GetSnapshotAsync(cancellationToken)).Documents.Any(other =>
+            other.Id != doc.Id && string.Equals(MapSalesCustomer(other).CustomerName, customerName.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (duplicate)
+            return false;
+
+        await doc.Reference.UpdateAsync(new Dictionary<string, object>
+        {
+            [nameof(SalesCustomer.CustomerName)] = customerName.Trim(),
+            [nameof(SalesCustomer.ContactName)] = (contactName ?? string.Empty).Trim(),
+            [nameof(SalesCustomer.ContactPhone)] = (contactPhone ?? string.Empty).Trim()
+        }, cancellationToken: cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> MergeSalesCustomersAsync(int survivingCustomerNumber, int duplicateCustomerNumber, CancellationToken cancellationToken = default)
+    {
+        if (survivingCustomerNumber <= 0 || duplicateCustomerNumber <= 0 || survivingCustomerNumber == duplicateCustomerNumber)
+            return false;
+
+        var collection = firestore.Collection("sales_customers");
+        var primaryDoc = await collection.Document(survivingCustomerNumber.ToString()).GetSnapshotAsync(cancellationToken);
+        var duplicateDoc = await collection.Document(duplicateCustomerNumber.ToString()).GetSnapshotAsync(cancellationToken);
+        if (!primaryDoc.Exists || !duplicateDoc.Exists)
+            return false;
+
+        var primary = MapSalesCustomer(primaryDoc);
+        var duplicate = MapSalesCustomer(duplicateDoc);
+        if (string.IsNullOrWhiteSpace(primary.CustomerName) || string.IsNullOrWhiteSpace(duplicate.CustomerName))
+            return false;
+
+        var assignedReps = primary.AssignedSalesReps
+            .Concat(duplicate.AssignedSalesReps)
+            .Where(rep => !string.IsNullOrWhiteSpace(rep))
+            .Select(rep => rep.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        await primaryDoc.Reference.UpdateAsync(new Dictionary<string, object>
+        {
+            [nameof(SalesCustomer.AssignedSalesReps)] = assignedReps,
+            [nameof(SalesCustomer.ContactName)] = string.IsNullOrWhiteSpace(primary.ContactName) ? duplicate.ContactName : primary.ContactName,
+            [nameof(SalesCustomer.ContactPhone)] = string.IsNullOrWhiteSpace(primary.ContactPhone) ? duplicate.ContactPhone : primary.ContactPhone
+        }, cancellationToken: cancellationToken);
+
+        var callSnapshot = await firestore.Collection("sales_calls").GetSnapshotAsync(cancellationToken);
+        foreach (var callDoc in callSnapshot.Documents)
+        {
+            var call = MapSalesCall(callDoc);
+            if (string.Equals(call.AccountName?.Trim(), duplicate.CustomerName.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                await callDoc.Reference.UpdateAsync(nameof(SalesCall.AccountName), primary.CustomerName, cancellationToken: cancellationToken);
+            }
+        }
+
+        await duplicateDoc.Reference.DeleteAsync(cancellationToken: cancellationToken);
         return true;
     }
 

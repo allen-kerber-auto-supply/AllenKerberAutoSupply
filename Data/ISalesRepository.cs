@@ -12,7 +12,9 @@ public interface ISalesRepository
     // Sales Customers & Account Assignments
     Task<IReadOnlyList<SalesCustomer>> GetSalesCustomersAsync(string? salesRepEmail, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetCustomerListAsync(string? salesRepEmail, CancellationToken cancellationToken = default);
-    Task<bool> InsertSalesCustomerAsync(string customerName, CancellationToken cancellationToken = default);
+    Task<bool> InsertSalesCustomerAsync(string customerName, string contactName, string contactPhone, CancellationToken cancellationToken = default);
+    Task<bool> UpdateSalesCustomerAsync(int customerNumber, string customerName, string contactName, string contactPhone, CancellationToken cancellationToken = default);
+    Task<bool> MergeSalesCustomersAsync(int survivingCustomerNumber, int duplicateCustomerNumber, CancellationToken cancellationToken = default);
     Task<bool> ConvertProspectToCustomerAsync(int callId, CancellationToken cancellationToken = default);
     Task<bool> DeleteSalesCustomerAsync(string customerName, CancellationToken cancellationToken = default);
     Task<bool> AssignAccountAsync(string customerName, string repEmail, CancellationToken cancellationToken = default);

@@ -25,6 +25,8 @@ export class NewCallComponent implements OnChanges {
   @Input() isAdmin = false;
   @Input() currentUserEmail = '';
   @Output() saved = new EventEmitter<SalesCall>();
+  @Output() customerUpdated = new EventEmitter<SalesCustomer>();
+  @Output() customerContactSaved = new EventEmitter<string>();
 
   newCall: SalesCall = this.emptyCall();
   selectedCustomerHistory: SalesCall[] = [];
@@ -35,6 +37,8 @@ export class NewCallComponent implements OnChanges {
   callTime = currentTimeValue();
   durationHours = 0;
   durationMinutes = 0;
+  savingCustomerContact = false;
+  customerContactMessage = '';
 
   constructor(private readonly salesService: SalesService) {
     this.resetNewCallForm();
@@ -76,7 +80,12 @@ export class NewCallComponent implements OnChanges {
 
   isAccountProspect(accountName: string): boolean {
     if (!accountName) return false;
-    return !this.customers.some(customer => this.accountName(customer).toLowerCase() === accountName.trim().toLowerCase());
+    const normalized = accountName.trim().toLowerCase();
+    return !this.accountNameOptions.some(option => option.trim().toLowerCase() === normalized);
+  }
+
+  isExistingCustomer(accountName: string): boolean {
+    return !!this.findCustomer(accountName);
   }
 
   onAccountNameChange(): void {
@@ -88,7 +97,12 @@ export class NewCallComponent implements OnChanges {
 
     const customer = this.findCustomer(name);
     this.newCall.isProspect = !customer;
-    if (customer) this.applyAssignedRep(customer);
+    if (customer) {
+      this.applyAssignedRep(customer);
+      this.newCall.contactName = customer.contactName || '';
+      this.newCall.phone = customer.contactPhone || '';
+      this.customerContactMessage = '';
+    }
 
     this.loadingCustomerHistory = true;
     this.salesService.getCallsByAccount(name).subscribe({
@@ -112,6 +126,37 @@ export class NewCallComponent implements OnChanges {
     this.setDefaultRep();
     this.selectedCustomerHistory = [];
     this.callErrorMessage = '';
+    this.customerContactMessage = '';
+  }
+
+  saveCustomerContact(field: 'contactName' | 'contactPhone'): void {
+    const customer = this.findCustomer(this.newCall.accountName);
+    if (!customer?.customerNumber) {
+      this.customerContactMessage = 'Select an existing customer account first.';
+      return;
+    }
+
+    this.savingCustomerContact = true;
+    this.customerContactMessage = '';
+    this.salesService.updateCustomer({
+      customerNumber: customer.customerNumber,
+      customerName: this.accountName(customer),
+      contactName: this.newCall.contactName || '',
+      contactPhone: this.newCall.phone || ''
+    }).subscribe({
+      next: () => {
+        customer.contactName = this.newCall.contactName || '';
+        customer.contactPhone = this.newCall.phone || '';
+        this.savingCustomerContact = false;
+        this.customerContactMessage = `${field === 'contactName' ? 'Contact name' : 'Contact phone'} saved.`;
+        this.customerUpdated.emit(customer);
+        this.customerContactSaved.emit(this.customerContactMessage);
+      },
+      error: error => {
+        this.savingCustomerContact = false;
+        this.customerContactMessage = error.error?.message || error.error || 'Unable to save the customer default.';
+      }
+    });
   }
 
   saveNewCall(): void {

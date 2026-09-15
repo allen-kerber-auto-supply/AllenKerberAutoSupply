@@ -62,7 +62,7 @@
         (accountFilterChange)="scheduledAccountFilter = $event"
         ></app-scheduled-calls>
 
-      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="handleNewCallSaved($event)"></app-new-call>
+      <app-new-call *ngIf="salesTab==='new-call'" [reps]="salesReps" [customers]="salesCustomers" [accountNameOptions]="accountNameOptions" [isAdmin]="isSalesAdminView" [currentUserEmail]="selectedSalesFilterRep || currentUserEmail" (saved)="handleNewCallSaved($event)" (customerContactSaved)="handleCustomerContactSaved($event)"></app-new-call>
 
       <app-sales-history
         *ngIf="salesTab==='history'"
@@ -99,6 +99,7 @@
         [reps]="salesReps"
         [unassignedCustomers]="unassignedCustomerOptions"
         [customers]="filteredSalesCustomers"
+        [allCustomers]="salesCustomers"
         [accountFilter]="adminAccountFilter"
         [repFilter]="adminRepFilter"
         [assignmentMessage]="accountAssignmentMessage"
@@ -117,7 +118,9 @@
         (addRepRequested)="addSalesRep()"
         (deleteRepRequested)="deleteSalesRep($event)"
         (assignCustomerRequested)="addSalesCustomer()"
-        (deleteCustomerRequested)="deleteSalesCustomer($event)"></app-sales-admin>
+        (deleteCustomerRequested)="deleteSalesCustomer($event)"
+        (updateCustomerRequested)="updateSalesCustomer($event)"
+        (mergeCustomersRequested)="mergeSalesCustomers($event)"></app-sales-admin>
 
     </section>
 

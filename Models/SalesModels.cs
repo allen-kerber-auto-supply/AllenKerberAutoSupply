@@ -31,6 +31,8 @@ public sealed class SalesCustomer
 {
     [FirestoreProperty] public int CustomerNumber { get; set; }
     [FirestoreProperty] public string CustomerName { get; set; } = string.Empty;
+    [FirestoreProperty] public string ContactName { get; set; } = string.Empty;
+    [FirestoreProperty] public string ContactPhone { get; set; } = string.Empty;
     [FirestoreProperty] public string Guid { get; set; } = string.Empty;
     [FirestoreProperty] public List<string> AssignedSalesReps { get; set; } = [];
 

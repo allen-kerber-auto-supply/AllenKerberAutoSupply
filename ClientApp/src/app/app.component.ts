@@ -308,7 +308,7 @@ export class AppComponent implements OnInit {
 
   get accountNameOptions(): string[] {
     const uniqueNames = new Map<string, string>();
-    for (const customer of [...this.salesCustomers, ...this.allCustomers]) {
+    for (const customer of this.salesCustomers) {
       const accountName = this.getAccountName(customer).trim();
       if (accountName && !uniqueNames.has(accountName.toLowerCase())) uniqueNames.set(accountName.toLowerCase(), accountName);
     }
@@ -440,7 +440,15 @@ export class AppComponent implements OnInit {
 
   handleNewCallSaved(call: SalesCall) {
     this.showCallStatusTab(call.status);
-    this.callSuccessMessage = 'Call saved successfully!';
+    this.showCallSuccessToast('Call saved successfully!');
+  }
+
+  handleCustomerContactSaved(message: string) {
+    this.showCallSuccessToast(message);
+  }
+
+  private showCallSuccessToast(message: string) {
+    this.callSuccessMessage = message;
     if (this.callSuccessToastTimer !== null) window.clearTimeout(this.callSuccessToastTimer);
     this.callSuccessToastTimer = window.setTimeout(() => {
       this.callSuccessMessage = '';
@@ -846,6 +854,24 @@ export class AppComponent implements OnInit {
       next: () => {
         this.loadSalesData();
       },
+      error: () => {}
+    });
+  }
+
+  updateSalesCustomer(customer: SalesCustomer) {
+    if (!customer.customerNumber || !customer.customerName?.trim()) return;
+    this.salesService.updateCustomer(customer).subscribe({
+      next: () => this.loadSalesData(),
+      error: () => {}
+    });
+  }
+
+  mergeSalesCustomers(request: { survivingCustomerNumber: number; duplicateCustomerNumber: number }) {
+    const survivor = this.salesCustomers.find(customer => customer.customerNumber === request.survivingCustomerNumber);
+    const duplicate = this.salesCustomers.find(customer => customer.customerNumber === request.duplicateCustomerNumber);
+    if (!survivor || !duplicate || !confirm(`Merge "${this.getAccountName(duplicate)}" into "${this.getAccountName(survivor)}"? This cannot be undone.`)) return;
+    this.salesService.mergeCustomers(request.survivingCustomerNumber, request.duplicateCustomerNumber).subscribe({
+      next: () => this.loadSalesData(),
       error: () => {}
     });
   }
