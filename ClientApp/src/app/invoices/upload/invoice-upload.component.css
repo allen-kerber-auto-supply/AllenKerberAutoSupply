@@ -10,12 +10,27 @@
 	text-decoration: underline;
 }
 
-.missing-invoice-row {
-	align-items: center;
-	display: flex;
-	gap: 0.5rem;
+.missing-invoice-item {
+	display: block;
+	min-width: 0;
+	padding-block: 0.35rem;
 }
 
-.missing-invoice-row input {
-	max-width: 10rem;
+.missing-invoice-editor {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.5rem;
+	min-width: 0;
+}
+
+.missing-invoice-editor input {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: 100%;
+}
+
+.missing-invoice-save {
+	flex: 0 0 auto;
+	white-space: nowrap;
 }
