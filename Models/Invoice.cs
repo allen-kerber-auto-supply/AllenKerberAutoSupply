@@ -44,6 +44,7 @@ public sealed class InvoiceImageLookup
 {
     [FirestoreProperty] public int StoreNumber { get; set; }
     [FirestoreProperty] public string InvoiceNumber { get; set; } = string.Empty;
+    [FirestoreProperty] public bool HasInvoice { get; set; }
     [FirestoreProperty] public int TotalPages { get; set; } = 1;
     [FirestoreProperty] public string ObjectName { get; set; } = string.Empty;
     [FirestoreProperty] public string BucketName { get; set; } = string.Empty;

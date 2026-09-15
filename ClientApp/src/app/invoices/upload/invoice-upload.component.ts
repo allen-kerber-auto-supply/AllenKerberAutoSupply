@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { HttpClient, HttpEventType } from '@angular/common/http';
 import { Component, EventEmitter, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin } from 'rxjs';
 import { Invoice, InvoiceUploadMissingImage, InvoiceUploadReconciliation, MisreadBarcodeItem, UploadProgressState } from '../../shared/models';
 
 @Component({
@@ -62,9 +61,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         this.reconciliation = result || { missingInvoiceImages: [], missingInvoices: [] };
         this.missingInvoiceDrafts = Object.fromEntries(
           this.reconciliation.missingInvoices.map(invoiceNumber => [invoiceNumber, invoiceNumber]));
-        const details = this.reconciliation.missingInvoiceImages.filter((item): item is InvoiceUploadMissingImage => typeof item !== 'string');
-        const keys = this.reconciliation.missingInvoiceImageKeys || this.reconciliation.missingInvoiceImages.filter((item): item is string => typeof item === 'string');
-        this.loadMissingDetails(details, keys);
+        this.missingImageDetails = this.reconciliation.missingInvoiceImages;
       },
       error: () => { this.reconciliation = { missingInvoiceImages: [], missingInvoices: [] }; this.missingImageDetails = []; }
     });
@@ -180,14 +177,6 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     if (type === 'csv') { this.csvStatus = 'Please select a store number before importing Excel data.'; this.csvProgress = 0; }
     else { this.imagesStatus = 'Please select a store number before uploading invoice images.'; this.imagesProgress = 0; }
     return false;
-  }
-
-  private loadMissingDetails(details: InvoiceUploadMissingImage[], keys: string[]) {
-    if (details.length || !keys.length) { this.missingImageDetails = details; return; }
-    forkJoin(keys.map(key => this.http.get<Invoice[]>(`/api/invoices?invoiceNumber=${encodeURIComponent(key)}`))).subscribe({
-      next: results => this.missingImageDetails = results.flat().map(invoice => ({ invoiceNumber: invoice.invoiceNumber, invoiceDate: invoice.invoiceDate, customerName: invoice.customerName, invoiceAmount: invoice.invoiceAmount })),
-      error: () => this.missingImageDetails = []
-    });
   }
 
   private startTimer(type: 'excel' | 'images') {

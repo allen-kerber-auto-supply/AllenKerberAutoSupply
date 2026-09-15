@@ -24,56 +24,28 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
 
         var invoiceSnapshot = await firestore.Collection("invoices")
             .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+            .WhereEqualTo(nameof(Invoice.HasImages), false)
             .GetSnapshotAsync(cancellationToken);
         var imageSnapshot = await firestore.Collection("invoice_images")
             .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+            .WhereEqualTo(nameof(InvoiceImageLookup.HasInvoice), false)
             .GetSnapshotAsync(cancellationToken);
 
-        var invoiceKeys = invoiceSnapshot.Documents
-            .Select(document => document.ConvertTo<Invoice>().InvoiceNumber)
-            .Select(Normalize)
-            .Where(key => key.Length > 0)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var imageKeys = imageSnapshot.Documents
+        var missingInvoiceImages = invoiceSnapshot.Documents
+            .Select(document => document.ConvertTo<Invoice>())
+            .Where(invoice => !string.IsNullOrWhiteSpace(invoice.InvoiceNumber))
+            .ToList();
+        var missingInvoices = imageSnapshot.Documents
             .Select(document => document.ConvertTo<InvoiceImageLookup>().InvoiceNumber)
+            .Where(invoiceNumber => !string.IsNullOrWhiteSpace(invoiceNumber))
             .Select(Normalize)
-            .Where(key => key.Length > 0)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(invoiceNumber => invoiceNumber, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var state = CreateState(invoiceKeys, imageKeys);
-        var storeRef = firestore.Collection("stores").Document(storeNumber.ToString());
-        await storeRef.SetAsync(new StoreRecord { StoreNumber = storeNumber, UploadState = state }, cancellationToken: cancellationToken);
-
-        return CreateResponse(state, invoiceSnapshot.Documents.Select(document => document.ConvertTo<Invoice>()));
-    }
-
-    private static StoreUploadState CreateState(HashSet<string> invoiceKeys, HashSet<string> imageKeys)
-    {
-        var state = new StoreUploadState
-        {
-            InvoiceKeys = invoiceKeys.ToDictionary(key => key, _ => true, StringComparer.OrdinalIgnoreCase),
-            ImageKeys = imageKeys.ToDictionary(key => key, _ => true, StringComparer.OrdinalIgnoreCase)
-        };
-        Recompute(state);
-        return state;
-    }
-
-    private static void Recompute(StoreUploadState state)
-    {
-        var invoiceKeys = state.InvoiceKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var imageKeys = state.ImageKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        state.MissingInvoiceImages = invoiceKeys.Except(imageKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-        state.MissingInvoices = imageKeys.Except(invoiceKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-        state.UpdatedAt = Timestamp.GetCurrentTimestamp();
-    }
-
-    private static InvoiceUploadReconciliation CreateResponse(StoreUploadState state, IEnumerable<Invoice> invoices)
-    {
-        var missingImageKeys = state.MissingInvoiceImages ?? [];
         return new InvoiceUploadReconciliation
         {
-            MissingInvoiceImages = invoices
-                .Where(invoice => missingImageKeys.Contains(Normalize(invoice.InvoiceNumber), StringComparer.OrdinalIgnoreCase))
+            MissingInvoiceImages = missingInvoiceImages
                 .Select(invoice => new InvoiceUploadMissingImage
                 {
                     InvoiceNumber = invoice.InvoiceNumber,
@@ -83,8 +55,12 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
                 })
                 .OrderBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
-            MissingInvoiceImageKeys = missingImageKeys,
-            MissingInvoices = state.MissingInvoices ?? []
+            MissingInvoiceImageKeys = missingInvoiceImages
+                .Select(invoice => Normalize(invoice.InvoiceNumber))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(invoiceNumber => invoiceNumber, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            MissingInvoices = missingInvoices
         };
     }
 

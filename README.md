@@ -40,6 +40,12 @@ The Google libraries automatically discover ADC. For a non-user local
 credential, set `GOOGLE_APPLICATION_CREDENTIALS` to a credential file path
 without committing that file.
 
+Invoice upload reconciliation uses explicit Firestore flags. Invoice records
+with `HasImages: false` are missing stored images, and `invoice_images` records
+with `HasInvoice: false` are images without matching invoice records. New
+invoice and image uploads update both flags and the stored image object name;
+documents without an explicit false flag are not included in the missing lists.
+
 ## Frontend structure
 
 The Angular application is organized under `ClientApp/src/app` by feature:

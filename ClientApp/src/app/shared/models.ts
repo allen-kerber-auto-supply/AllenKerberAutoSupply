@@ -67,7 +67,7 @@ export interface InvoiceUploadMissingImage {
 }
 
 export interface InvoiceUploadReconciliation {
-  missingInvoiceImages: (InvoiceUploadMissingImage | string)[];
+  missingInvoiceImages: InvoiceUploadMissingImage[];
   missingInvoiceImageKeys?: string[];
   missingInvoices: string[];
 }
