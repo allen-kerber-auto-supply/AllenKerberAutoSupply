@@ -1,5 +1,11 @@
 :host { display: block; }
 
+.upload-file-label.disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
 .upload-missing-invoice-link {
 	background: none;
 	border: 0;
@@ -32,5 +38,11 @@
 
 .missing-invoice-save {
 	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.missing-invoice-editor .button.danger {
+	flex: 0 0 auto;
+	min-width: 4.75rem;
 	white-space: nowrap;
 }

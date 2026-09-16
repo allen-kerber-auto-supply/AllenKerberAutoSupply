@@ -116,11 +116,11 @@
         (repFilterChange)="adminRepFilter = $event"
         (filtersChanged)="applyAdminAccountFilter()"
         (addRepRequested)="addSalesRep()"
+        (addCustomerRequested)="addNewSalesCustomer($event)"
         (deleteRepRequested)="deleteSalesRep($event)"
         (assignCustomerRequested)="addSalesCustomer()"
         (deleteCustomerRequested)="deleteSalesCustomer($event)"
-        (updateCustomerRequested)="updateSalesCustomer($event)"
-        (mergeCustomersRequested)="mergeSalesCustomers($event)"></app-sales-admin>
+        (updateCustomerRequested)="updateSalesCustomer($event)"></app-sales-admin>
 
     </section>
 

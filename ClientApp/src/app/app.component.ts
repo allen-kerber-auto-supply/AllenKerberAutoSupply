@@ -819,6 +819,22 @@ export class AppComponent implements OnInit {
     });
   }
 
+  addNewSalesCustomer(customer: SalesCustomer) {
+    const customerName = (customer.customerName || '').trim();
+    if (!customerName) return;
+
+    this.salesService.addCustomer({
+      customerName,
+      contactName: (customer.contactName || '').trim(),
+      contactPhone: (customer.contactPhone || '').trim()
+    }).subscribe({
+      next: () => {
+        this.loadSalesData();
+      },
+      error: () => {}
+    });
+  }
+
   deleteSalesCustomer(cust: any) {
     const name = this.getAccountName(cust);
     const assignedRepEmails = this.getAssignedRepEmails(cust);
@@ -834,16 +850,6 @@ export class AppComponent implements OnInit {
   updateSalesCustomer(customer: SalesCustomer) {
     if (!customer.customerNumber || !customer.customerName?.trim()) return;
     this.salesService.updateCustomer(customer).subscribe({
-      next: () => this.loadSalesData(),
-      error: () => {}
-    });
-  }
-
-  mergeSalesCustomers(request: { survivingCustomerNumber: number; duplicateCustomerNumber: number }) {
-    const survivor = this.salesCustomers.find(customer => customer.customerNumber === request.survivingCustomerNumber);
-    const duplicate = this.salesCustomers.find(customer => customer.customerNumber === request.duplicateCustomerNumber);
-    if (!survivor || !duplicate || !confirm(`Merge "${this.getAccountName(duplicate)}" into "${this.getAccountName(survivor)}"? This cannot be undone.`)) return;
-    this.salesService.mergeCustomers(request.survivingCustomerNumber, request.duplicateCustomerNumber).subscribe({
       next: () => this.loadSalesData(),
       error: () => {}
     });

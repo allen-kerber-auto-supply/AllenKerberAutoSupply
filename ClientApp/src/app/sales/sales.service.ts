@@ -58,6 +58,14 @@ export class SalesService {
     return this.http.post('/api/sales/assignments', { customerName, repEmail });
   }
 
+  addCustomer(customer: Pick<SalesCustomer, 'customerName' | 'contactName' | 'contactPhone'>) {
+    return this.http.post('/api/sales/customers', {
+      customerName: customer.customerName,
+      contactName: customer.contactName || '',
+      contactPhone: customer.contactPhone || ''
+    });
+  }
+
   updateCustomer(customer: Pick<SalesCustomer, 'customerNumber' | 'customerName' | 'contactName' | 'contactPhone'>) {
     return this.http.put(`/api/sales/customers/${customer.customerNumber}`, {
       customerName: customer.customerName,

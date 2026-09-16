@@ -225,6 +225,7 @@ public sealed class InvoicesController(
             }
         }
 
+        rows = rows.Where(IsChargeInvoiceRow).ToList();
         var totalRows = rows.Count;
         var operation = "excel";
         uploadProgressEventBus.Publish(operation, "in_progress", 0, "Preparing to import invoice rows...", 0, totalRows);
@@ -271,7 +272,8 @@ public sealed class InvoicesController(
         var amount = ParseDecimal(GetRowValue(row, "invoice_amount", "invoiceAmount", "amount", "invoice total", "invoicetotal")) ?? 0m;
         var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
         var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
-        if (string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
+        if (!IsChargeInvoice(transactionType, paymentMethod)
+            || string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
             || string.Equals(paymentMethod.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
             || string.Equals(paymentMethod.Trim(), "CHECK", StringComparison.OrdinalIgnoreCase)
             || string.Equals(transactionType.Trim(), "VOID", StringComparison.OrdinalIgnoreCase))
@@ -305,6 +307,23 @@ public sealed class InvoicesController(
         {
             return (false, $"Unable to import invoice {invoiceValue}: {ex.Message}");
         }
+    }
+
+    private static bool IsChargeInvoiceRow(Dictionary<string, string> row)
+    {
+        var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
+        var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
+        return IsChargeInvoice(transactionType, paymentMethod)
+            && !string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(paymentMethod.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(paymentMethod.Trim(), "CHECK", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(transactionType.Trim(), "VOID", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsChargeInvoice(string transactionType, string paymentMethod)
+    {
+        return string.Equals(transactionType.Trim(), "CHARGE", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paymentMethod.Trim(), "CHARGE", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FirestoreCustomer? GetCustomerFromRow(Dictionary<string, string> row, int customerNumber)
@@ -386,24 +405,16 @@ public sealed class InvoicesController(
                 if (string.IsNullOrWhiteSpace(invoiceNumber))
                 {
                     await using var source = file.OpenReadStream();
-                    using var copy = new MemoryStream();
-                    await source.CopyToAsync(copy, cancellationToken);
-                    copy.Position = 0;
-
-                    await invoiceImageRepository.SaveMisreadBarcodeAsync(copy, file.FileName, file.ContentType ?? "image/png", cancellationToken);
+                    await invoiceImageRepository.SaveMisreadBarcodeAsync(source, file.FileName, file.ContentType ?? "image/png", cancellationToken);
                     errors.Add($"Could not read a valid invoice barcode from {file.FileName}. Saved to misread barcodes for review.");
                 }
                 else
                 {
                     await using var sourceForUpload = file.OpenReadStream();
-                    using var copyForUpload = new MemoryStream();
-                    await sourceForUpload.CopyToAsync(copyForUpload, cancellationToken);
-                    copyForUpload.Position = 0;
-
                     var objectName = await invoiceImageRepository.InsertInvoiceImageAsync(
                         invoiceNumber,
                         storeNumber,
-                        copyForUpload,
+                        sourceForUpload,
                         file.ContentType ?? "image/png",
                         false,
                         cancellationToken: cancellationToken);

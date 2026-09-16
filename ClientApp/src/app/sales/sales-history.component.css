@@ -3,11 +3,6 @@
 }
 
 .call-record-viewport {
-  height: min(680px, calc(100vh - 360px));
-  min-height: 240px;
-  max-height: 680px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 0.25rem;
 }
 
@@ -16,4 +11,49 @@
   color: var(--muted);
   text-align: center;
   font-size: 0.8rem;
+}
+
+.call-record-meta {
+  row-gap: 0.25rem;
+}
+
+.call-record-list {
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.call-record-card {
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.call-record-header {
+  position: relative;
+  gap: 0.4rem;
+  padding-right: 2.25rem;
+}
+
+.call-record-actions {
+  gap: 0.35rem;
+}
+
+.call-record-delete {
+  position: absolute;
+  top: -0.15rem;
+  right: 0;
+  display: grid;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  place-items: center;
+  font-size: 0.9rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+.call-record-delete:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, #dc4d4d 12%, transparent);
 }

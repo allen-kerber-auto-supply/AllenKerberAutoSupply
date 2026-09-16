@@ -50,9 +50,8 @@ export class ScheduledCallsComponent implements OnChanges {
     return this.filteredCalls.slice(0, this.visibleCount);
   }
 
-  onCallListScroll(event: Event) {
-    const element = event.target as HTMLElement;
-    if (element.scrollTop + element.clientHeight < element.scrollHeight - 160) return;
+  onCallListScroll() {
+    if (window.scrollY + window.innerHeight < document.documentElement.scrollHeight - 160) return;
     if (this.visibleCount >= this.filteredCalls.length) return;
 
     this.visibleCount = Math.min(this.visibleCount + this.batchSize, this.filteredCalls.length);

@@ -34,16 +34,16 @@
 
   <div class="card sales-admin-card sales-admin-customers">
     <h2>Edit Sales Customers</h2>
-    <p class="muted-note">Update the account name and default contact details stored for sales calls.</p>
-    <div *ngIf="!editingCustomer" class="sales-admin-form">
+    <p class="muted-note">Create a customer or update the account name and default contact details stored for sales calls.</p>
+    <div class="sales-admin-form">
       <label>Customer
-        <select [ngModel]="null" (ngModelChange)="beginEdit($event)" name="editCustomer">
-          <option [ngValue]="null">Select a customer</option>
+        <select [ngModel]="editingCustomer.customerNumber || 0" (ngModelChange)="beginEditByNumber($event)" name="editCustomer">
+          <option [ngValue]="0">New customer</option>
           <option *ngFor="let customer of editableCustomers" [ngValue]="customer">{{accountName(customer)}}</option>
         </select>
       </label>
     </div>
-    <form *ngIf="editingCustomer" (ngSubmit)="saveEdit()" class="sales-admin-form">
+    <form (ngSubmit)="saveEdit()" class="sales-admin-form">
       <label>Customer Name
         <input [(ngModel)]="editingCustomer.customerName" name="editCustomerName" required>
       </label>
@@ -54,28 +54,11 @@
         <input [(ngModel)]="editingCustomer.contactPhone" name="editContactPhone" type="tel" placeholder="(555) 000-0000">
       </label>
       <div class="form-actions">
-        <button class="button secondary" type="button" (click)="cancelEdit()">Cancel</button>
-        <button class="button primary" type="submit">Save Customer</button>
+        <button *ngIf="editingCustomer.customerNumber" class="button secondary" type="button" (click)="cancelEdit()">New Customer</button>
+        <button class="button primary" type="submit">{{editingCustomer.customerNumber ? 'Save Customer' : 'Add Customer'}}</button>
       </div>
     </form>
 
-    <div class="sales-admin-form" style="margin-top: 1rem;">
-      <h3>Merge Duplicate Customers</h3>
-      <p class="muted-note">The surviving customer keeps its details and receives any missing defaults and assignments.</p>
-      <label>Keep Customer
-        <select [(ngModel)]="mergeSurvivorNumber" name="mergeSurvivor">
-          <option [ngValue]="0">Select the customer to keep</option>
-          <option *ngFor="let customer of editableCustomers" [ngValue]="customer.customerNumber">{{accountName(customer)}}</option>
-        </select>
-      </label>
-      <label>Merge Duplicate Into It
-        <select [(ngModel)]="mergeDuplicateNumber" name="mergeDuplicate">
-          <option [ngValue]="0">Select the duplicate customer</option>
-          <option *ngFor="let customer of editableCustomers" [ngValue]="customer.customerNumber">{{accountName(customer)}}</option>
-        </select>
-      </label>
-      <button class="button danger" type="button" [disabled]="!mergeSurvivorNumber || !mergeDuplicateNumber || mergeSurvivorNumber === mergeDuplicateNumber" (click)="mergeCustomers()">Merge Customers</button>
-    </div>
   </div>
 
   <div class="card sales-admin-card sales-admin-reps">

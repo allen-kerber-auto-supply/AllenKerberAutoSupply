@@ -1,7 +1,7 @@
 <div class="sales-tab-content">
   <div class="card table">
     <div *ngIf="loading" class="state"><p>Loading scheduled calls...</p></div>
-    <div *ngIf="!loading && calls.length" class="scheduled-call-viewport" (scroll)="onCallListScroll($event)">
+    <div *ngIf="!loading && calls.length" class="scheduled-call-viewport" (window:scroll)="onCallListScroll()">
       <div class="call-record-list">
       <article *ngFor="let call of visibleCalls" class="call-record-card" role="button" tabindex="0" (click)="callSelected.emit(call)" (keydown)="onCardKeydown($event, call)">
         <div class="call-record-header">
@@ -10,6 +10,7 @@
             <p>{{call.contactName || 'No contact specified'}}</p>
           </div>
           <span class="status-badge" [class.completed]="call.status===1" [class.scheduled]="call.status===0 || call.status===2">{{call.status===1 ? 'Completed' : call.status===2 ? 'Rescheduled' : 'Scheduled'}}</span>
+          <button *ngIf="isAdmin" class="button danger call-record-delete" type="button" aria-label="Delete call" title="Delete call" (click)="$event.stopPropagation(); deleteRequested.emit(call)">🗑️</button>
         </div>
         <div class="call-record-meta">
           <span class="call-date-value"><b>Call date</b> {{formatCallDate(call.callDate || call.createdDate)}}</span>
@@ -19,7 +20,6 @@
         <p *ngIf="call.comments" class="call-record-comments">{{call.comments}}</p>
         <div class="call-record-actions">
           <button *ngIf="call.status===0" class="button secondary" type="button" (click)="$event.stopPropagation(); completeRequested.emit(call)">Mark Complete</button>
-          <button *ngIf="isAdmin" class="button danger view-btn" type="button" (click)="$event.stopPropagation(); deleteRequested.emit(call)">Delete</button>
         </div>
       </article>
       </div>

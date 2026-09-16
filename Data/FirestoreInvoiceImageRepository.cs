@@ -368,15 +368,10 @@ public sealed class FirestoreInvoiceImageRepository(
 
         string imageDocId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoice_images").Document(imageDocId);
-        var invoiceSnapshot = await firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+        var invoiceDocument = await firestore.Collection("invoices")
+            .Document($"{storeNumber}_{normalized}")
             .GetSnapshotAsync(cancellationToken);
-        var invoiceDocument = invoiceSnapshot.Documents.FirstOrDefault(document =>
-            string.Equals(
-                NormalizeInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
-                NormalizeInvoiceNumber(normalized),
-                StringComparison.OrdinalIgnoreCase));
-        var hasInvoice = invoiceDocument is not null;
+        var hasInvoice = invoiceDocument.Exists;
 
         string bucketName = gcpOptions.Value.ImageBucket;
         string resolvedContentType = string.IsNullOrWhiteSpace(contentType) ? "image/png" : contentType;
@@ -437,7 +432,7 @@ public sealed class FirestoreInvoiceImageRepository(
             transaction.Set(docRef, lookup);
         }, cancellationToken: cancellationToken);
 
-        if (invoiceDocument is not null)
+        if (invoiceDocument.Exists)
         {
             await invoiceDocument.Reference.UpdateAsync(new Dictionary<string, object>
             {
@@ -445,8 +440,6 @@ public sealed class FirestoreInvoiceImageRepository(
                 { nameof(Invoice.ImageObjectName), primaryObjectName }
             }, cancellationToken: cancellationToken);
         }
-
-        await reconciliationStore.ReconcileImageAsync(storeNumber, normalized, cancellationToken);
 
         return finalObjectName;
     }
