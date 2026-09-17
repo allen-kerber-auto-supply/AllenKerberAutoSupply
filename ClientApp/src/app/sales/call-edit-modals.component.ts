@@ -14,10 +14,14 @@ export class CallEditModalsComponent implements OnChanges {
   @Input() completingCall: SalesCall | null = null;
   @Input() completingComments = '';
   @Input() completingFollowUpDate = '';
+  @Input() completingDurationHours = 0;
+  @Input() completingDurationMinutes = 0;
   @Input() editingCall: SalesCall | null = null;
 
   @Output() completingCommentsChange = new EventEmitter<string>();
   @Output() completingFollowUpDateChange = new EventEmitter<string>();
+  @Output() completingDurationHoursChange = new EventEmitter<number>();
+  @Output() completingDurationMinutesChange = new EventEmitter<number>();
   @Output() editingCallChange = new EventEmitter<SalesCall>();
   @Output() completeRequested = new EventEmitter<void>();
   @Output() editRequested = new EventEmitter<void>();
@@ -57,6 +61,14 @@ export class CallEditModalsComponent implements OnChanges {
 
   onDurationMinutesChange(value: string | number): void {
     this.updateDuration(this.durationHours, this.toWholeNumber(value));
+  }
+
+  onCompletingDurationHoursChange(value: string | number): void {
+    this.completingDurationHoursChange.emit(Math.min(8, Math.max(0, this.toWholeNumber(value))));
+  }
+
+  onCompletingDurationMinutesChange(value: string | number): void {
+    this.completingDurationMinutesChange.emit(Math.min(59, Math.max(0, this.toWholeNumber(value))));
   }
 
   private initializeEditTimingState(): void {

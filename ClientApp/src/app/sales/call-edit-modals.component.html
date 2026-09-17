@@ -3,6 +3,7 @@
     <p class="eyebrow">Complete Call</p><h2>{{completingCall.accountName}}</h2>
     <p>Mark this call as completed, add conversation notes, and optionally set a follow-up date.</p>
     <label>Conversation Notes / Outcome *<textarea [ngModel]="completingComments" (ngModelChange)="completingCommentsChange.emit($event)" name="completeNotes" rows="4" required placeholder="What was discussed?"></textarea></label>
+    <div class="form-grid-2"><label>Call Duration (hours)<input type="number" min="0" max="8" [ngModel]="completingDurationHours" (ngModelChange)="onCompletingDurationHoursChange($event)" name="completeDurationHours"></label><label>Minutes<input type="number" min="0" max="59" [ngModel]="completingDurationMinutes" (ngModelChange)="onCompletingDurationMinutesChange($event)" name="completeDurationMinutes"></label></div>
     <label>Schedule Follow-up Date (Optional)<input type="date" [ngModel]="completingFollowUpDate" (ngModelChange)="completingFollowUpDateChange.emit($event)" name="completeFollowUp"><small class="muted">Leave blank if no follow-up is needed.</small></label>
     <div class="modal-actions"><button class="button secondary" type="button" (click)="closed.emit()">Cancel</button><button class="button primary" type="submit" [disabled]="!completingComments.trim()">Complete Call</button></div>
   </form>

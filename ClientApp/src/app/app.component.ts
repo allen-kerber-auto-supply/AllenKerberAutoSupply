@@ -86,6 +86,8 @@ export class AppComponent implements OnInit {
   completingCall: SalesCall | null = null;
   completingComments = '';
   completingFollowUpDate = '';
+  completingDurationHours = 0;
+  completingDurationMinutes = 0;
   selectedCallDetails: SalesCall | null = null;
   editingCall: SalesCall | null = null;
   newSalesRep: SalesRep = { repName: '', repEmail: '' };
@@ -490,6 +492,9 @@ export class AppComponent implements OnInit {
     this.completingCall = call;
     this.completingComments = call.comments || '';
     this.completingFollowUpDate = call.followUpDate ? call.followUpDate.slice(0, 10) : '';
+    const duration = Number.isFinite(call.callDuration) && (call.callDuration ?? 0) > 0 ? Number(call.callDuration) : 0;
+    this.completingDurationHours = Math.floor(duration / 60);
+    this.completingDurationMinutes = duration % 60;
   }
 
   saveCompleteCall() {
@@ -499,7 +504,8 @@ export class AppComponent implements OnInit {
       ...this.completingCall,
       status: 1,
       comments: this.completingComments,
-      followUpDate: this.completingFollowUpDate || undefined
+      followUpDate: this.completingFollowUpDate || undefined,
+      callDuration: this.completingDurationHours * 60 + this.completingDurationMinutes
     };
     this.salesService.updateCall(Number(callId), updated).subscribe({
       next: () => {
