@@ -368,10 +368,6 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore, ICustomerLis
     private async Task<IReadOnlyList<SalesCustomer>> LoadSalesCustomersAsync(CancellationToken cancellationToken)
     {
         Query query = firestore.Collection("sales_customers");
-        if (!string.IsNullOrWhiteSpace(salesRepEmail))
-        {
-            query = query.WhereArrayContains(nameof(SalesCustomer.AssignedSalesReps), salesRepEmail.Trim().ToLowerInvariant());
-        }
 
         var snapshot = await query.GetSnapshotAsync(cancellationToken);
         List<SalesCustomer> customers;
