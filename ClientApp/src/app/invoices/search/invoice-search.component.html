@@ -3,7 +3,7 @@
     <div class="invoice-search-col">
       <div class="card lookup">
         <div class="lookup-heading"><h2>Search Invoices</h2><button class="button secondary" type="button" (click)="uploadRequested.emit()">Invoice Uploads</button></div>
-        <div class="search-group"><label>Invoice number<div class="input-with-clear"><input [(ngModel)]="invoiceNumber" placeholder="e.g. INV-1042" (keyup.enter)="search()"><button *ngIf="invoiceNumber" class="clear-btn" type="button" title="Clear" (click)="invoiceNumber=''">&times;</button></div></label></div>
+        <div class="search-group"><label>Invoice number<div class="input-with-clear"><input [(ngModel)]="invoiceNumber" placeholder="Search by partial or full invoice #" (keyup.enter)="search()"><button *ngIf="invoiceNumber" class="clear-btn" type="button" title="Clear" (click)="invoiceNumber=''">&times;</button></div></label></div>
         <div class="search-divider">OR search by customer</div>
         <div class="search-group"><label>Customer name<div class="input-with-clear"><input [(ngModel)]="customerName" list="customerNameOptions" placeholder="Start typing a customer name" (keyup.enter)="search()" autocomplete="off"><button *ngIf="customerName" class="clear-btn" type="button" title="Clear customer name" (click)="customerName=''">&times;</button></div></label>
           <datalist id="customerNameOptions"><option *ngFor="let customer of customers" [value]="customer.customerName"></option></datalist>
