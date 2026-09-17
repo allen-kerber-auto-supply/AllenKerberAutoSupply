@@ -39,6 +39,7 @@ export class NewCallComponent implements OnChanges {
   durationMinutes = 0;
   savingCustomerContact = false;
   customerContactMessage = '';
+  accountNameSuggestionsVisible = false;
 
   constructor(private readonly salesService: SalesService) {
     this.resetNewCallForm();
@@ -117,6 +118,26 @@ export class NewCallComponent implements OnChanges {
     });
   }
 
+  get filteredAccountNameOptions(): string[] {
+    const query = (this.newCall.accountName || '').trim().toLowerCase();
+    return this.accountNameOptions.filter(accountName => accountName.trim().toLowerCase().startsWith(query));
+  }
+
+  onAccountNameInput(): void {
+    this.accountNameSuggestionsVisible = true;
+  }
+
+  onAccountNameBlur(): void {
+    this.accountNameSuggestionsVisible = false;
+    this.onAccountNameChange();
+  }
+
+  selectAccountName(accountName: string): void {
+    this.newCall.accountName = accountName;
+    this.accountNameSuggestionsVisible = false;
+    this.onAccountNameChange();
+  }
+
   resetNewCallForm(): void {
     this.newCall = { accountName: '', contactName: '', phone: '', comments: '', repEmail: '', repName: '', status: 0, callDate: today(), followUpDate: '' };
     this.callTime = currentTimeValue();
@@ -127,6 +148,7 @@ export class NewCallComponent implements OnChanges {
     this.selectedCustomerHistory = [];
     this.callErrorMessage = '';
     this.customerContactMessage = '';
+    this.accountNameSuggestionsVisible = false;
   }
 
   saveCustomerContact(field: 'contactName' | 'contactPhone'): void {

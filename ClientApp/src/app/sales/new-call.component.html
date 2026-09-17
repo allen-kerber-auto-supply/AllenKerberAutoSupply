@@ -4,10 +4,13 @@
     <p class="muted-note">Record customer interactions, schedule follow-ups, and review account history.</p>
     <form (ngSubmit)="saveNewCall()" class="sales-form">
       <div class="form-row">
-        <label>Account Name *<div class="input-with-clear">
-          <input [(ngModel)]="newCall.accountName" name="accountName" list="salesCustomerOptions" placeholder="Type or select account name" (change)="onAccountNameChange()" (blur)="onAccountNameChange()" required autocomplete="off">
+        <label>Account Name *<div class="input-with-clear account-name-picker">
+          <input [(ngModel)]="newCall.accountName" name="accountName" placeholder="Type or select account name" (ngModelChange)="onAccountNameInput()" (focus)="accountNameSuggestionsVisible = true" (change)="onAccountNameChange()" (blur)="onAccountNameBlur()" required autocomplete="off" role="combobox" [attr.aria-expanded]="accountNameSuggestionsVisible && filteredAccountNameOptions.length > 0" aria-controls="salesCustomerOptions">
           <button *ngIf="newCall.accountName" class="clear-btn" type="button" title="Clear account name" (click)="newCall.accountName=''; onAccountNameChange()">&times;</button>
-        </div><datalist id="salesCustomerOptions"><option *ngFor="let accountName of accountNameOptions" [value]="accountName"></option></datalist></label>
+          <div *ngIf="accountNameSuggestionsVisible && filteredAccountNameOptions.length" id="salesCustomerOptions" class="account-name-suggestions" role="listbox">
+            <button *ngFor="let accountName of filteredAccountNameOptions" type="button" class="account-name-suggestion" role="option" (mousedown)="$event.preventDefault(); selectAccountName(accountName)">{{accountName}}</button>
+          </div>
+        </div></label>
         <div class="account-type-indicator">
           <span *ngIf="newCall.accountName && isAccountProspect(newCall.accountName)" class="status-badge prospect">Prospect Account</span>
           <span *ngIf="newCall.accountName && isAssignedSalesCustomer(newCall.accountName)" class="status-badge customer">Assigned Customer</span>
