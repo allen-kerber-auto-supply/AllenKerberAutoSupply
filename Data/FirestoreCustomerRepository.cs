@@ -3,9 +3,14 @@ using Google.Cloud.Firestore;
 
 namespace AllenKerberAutoSupply.Data;
 
-public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustomerRepository
+public sealed class FirestoreCustomerRepository(FirestoreDb firestore, ICustomerListCache customerListCache) : ICustomerRepository
 {
     public async Task<IReadOnlyList<CustomerSummary>> GetInvoiceCustomerListAsync(CancellationToken cancellationToken = default)
+    {
+        return await customerListCache.GetInvoiceCustomerListAsync(LoadInvoiceCustomerListAsync, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<CustomerSummary>> LoadInvoiceCustomerListAsync(CancellationToken cancellationToken)
     {
         var snapshot = await firestore.Collection("customers").GetSnapshotAsync(cancellationToken);
         return snapshot.Documents.Select(doc =>
@@ -24,6 +29,11 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
     }
 
     public async Task<IReadOnlyList<FirestoreCustomer>> GetAdminCustomerListAsync(CancellationToken cancellationToken = default)
+    {
+        return await customerListCache.GetAdminCustomerListAsync(LoadAdminCustomerListAsync, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<FirestoreCustomer>> LoadAdminCustomerListAsync(CancellationToken cancellationToken)
     {
         var snapshot = await firestore.Collection("customers").GetSnapshotAsync(cancellationToken);
         return snapshot.Documents.Select(doc => doc.ConvertTo<FirestoreCustomer>()).OrderBy(customer => customer.CustomerName).ToList();
@@ -51,6 +61,7 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
 
         Normalize(customer);
         await docRef.CreateAsync(customer, cancellationToken);
+        customerListCache.InvalidateInvoiceCustomers();
         return true;
     }
 
@@ -63,6 +74,7 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
 
         Normalize(customer);
         await docRef.SetAsync(customer, cancellationToken: cancellationToken);
+        customerListCache.InvalidateInvoiceCustomers();
         return true;
     }
 
@@ -76,6 +88,7 @@ public sealed class FirestoreCustomerRepository(FirestoreDb firestore) : ICustom
         customer.CustomerNumber = customerNumber;
         Normalize(customer);
         await docRef.SetAsync(customer, cancellationToken: cancellationToken);
+        customerListCache.InvalidateInvoiceCustomers();
         return true;
     }
 

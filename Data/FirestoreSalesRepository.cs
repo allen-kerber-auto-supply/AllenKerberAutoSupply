@@ -3,7 +3,7 @@ using Google.Cloud.Firestore;
 
 namespace AllenKerberAutoSupply.Data;
 
-public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepository
+public sealed class FirestoreSalesRepository(FirestoreDb firestore, ICustomerListCache customerListCache) : ISalesRepository
 {
     private static SalesRep MapSalesRep(DocumentSnapshot doc)
     {
@@ -357,6 +357,16 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
     // Sales Customers & Account Assignments
     public async Task<IReadOnlyList<SalesCustomer>> GetSalesCustomersAsync(string? salesRepEmail, CancellationToken cancellationToken = default)
     {
+        var customers = await customerListCache.GetSalesCustomerListAsync(LoadSalesCustomersAsync, cancellationToken);
+        return customers
+            .Where(c => string.IsNullOrWhiteSpace(salesRepEmail) ||
+                        c.AssignedSalesReps.Any(r => string.Equals(r, salesRepEmail.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(c => c.CustomerName)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<SalesCustomer>> LoadSalesCustomersAsync(CancellationToken cancellationToken)
+    {
         Query query = firestore.Collection("sales_customers");
         if (!string.IsNullOrWhiteSpace(salesRepEmail))
         {
@@ -392,11 +402,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
                 .ToList();
         }
 
-        return customers
-            .Where(c => string.IsNullOrWhiteSpace(salesRepEmail) ||
-                        c.AssignedSalesReps.Any(r => string.Equals(r, salesRepEmail.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(c => c.CustomerName)
-            .ToList();
+        return customers;
     }
 
     public async Task<IReadOnlyList<string>> GetCustomerListAsync(string? salesRepEmail, CancellationToken cancellationToken = default)
@@ -442,6 +448,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         };
 
         await docRef.SetAsync(customer, cancellationToken: cancellationToken);
+        customerListCache.InvalidateSalesCustomers();
         return true;
     }
 
@@ -465,6 +472,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             [nameof(SalesCustomer.ContactName)] = (contactName ?? string.Empty).Trim(),
             [nameof(SalesCustomer.ContactPhone)] = (contactPhone ?? string.Empty).Trim()
         }, cancellationToken: cancellationToken);
+        customerListCache.InvalidateSalesCustomers();
         return true;
     }
 
@@ -508,6 +516,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
         }
 
         await duplicateDoc.Reference.DeleteAsync(cancellationToken: cancellationToken);
+        customerListCache.InvalidateSalesCustomers();
         return true;
     }
 
@@ -592,6 +601,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             AssignedSalesReps = [email]
         };
         await newDocRef.SetAsync(newCustomer, cancellationToken: cancellationToken);
+        customerListCache.InvalidateSalesCustomers();
         return true;
     }
 
@@ -618,6 +628,7 @@ public sealed class FirestoreSalesRepository(FirestoreDb firestore) : ISalesRepo
             .ToList();
 
         await doc.Reference.UpdateAsync(nameof(SalesCustomer.AssignedSalesReps), updatedReps, cancellationToken: cancellationToken);
+        customerListCache.InvalidateSalesCustomers();
         return true;
     }
 

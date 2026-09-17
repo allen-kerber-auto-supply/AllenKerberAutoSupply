@@ -33,9 +33,11 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton(StorageClient.Create());
 builder.Services.AddDistributedMemoryCache();
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IInvoiceUploadReconciliationStore, FirestoreInvoiceUploadReconciliationStore>();
 builder.Services.AddSingleton<IInvoiceRepository, FirestoreInvoiceRepository>();
 builder.Services.AddSingleton<IInvoiceStoreCache, InvoiceStoreCache>();
+builder.Services.AddSingleton<ICustomerListCache, CustomerListCache>();
 builder.Services.AddSingleton<IInvoiceImageRepository, FirestoreInvoiceImageRepository>();
 builder.Services.AddSingleton<IUploadProgressEventBus, InvoiceUploadProgressEventBus>();
 builder.Services.AddSingleton<ICustomerRepository, FirestoreCustomerRepository>();
