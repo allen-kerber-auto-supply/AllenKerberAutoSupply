@@ -11,5 +11,8 @@
       <i>I</i>
       <span><small>Records</small><b>Invoices</b><em>Find customer purchase history.</em></span>&rarr;
     </button>
+    <button *ngIf="canViewTrends" class="app-card trends" (click)="selectWorkspace('trends')">
+      <i>T</i><span><small>Intelligence</small><b>Trends</b><em>Spot customers whose purchasing is slowing down.</em></span>&rarr;
+    </button>
   </div>
 </section>

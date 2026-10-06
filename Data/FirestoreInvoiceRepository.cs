@@ -193,6 +193,36 @@ public sealed class FirestoreInvoiceRepository(
         return ToSearchPage(snapshot.Documents.Select(d => d.ConvertTo<Invoice>()), totalCount);
     }
 
+    public async Task<IReadOnlyList<Invoice>> GetInvoicesForTrendAsync(DateTime beginDate, DateTime endDate, CancellationToken cancellationToken = default)
+    {
+        var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
+        var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
+        var snapshot = await firestore.Collection("invoices")
+            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
+            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp)
+            .GetSnapshotAsync(cancellationToken);
+        return snapshot.Documents.Select(document => document.ConvertTo<Invoice>()).ToArray();
+    }
+
+    public async Task<IReadOnlyList<Invoice>> GetInvoicesForTrendCustomersAsync(
+        IReadOnlyCollection<int> customerNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        if (customerNumbers.Count == 0)
+            return [];
+
+        var invoices = new List<Invoice>();
+        foreach (var customerChunk in customerNumbers.Where(number => number > 0).Distinct().Chunk(30))
+        {
+            var snapshot = await firestore.Collection("invoices")
+                .WhereIn(nameof(Invoice.CustomerNumber), customerChunk.Cast<object>())
+                .GetSnapshotAsync(cancellationToken);
+            invoices.AddRange(snapshot.Documents.Select(document => document.ConvertTo<Invoice>()));
+        }
+
+        return invoices;
+    }
+
     public async Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
     {
         string raw = (invoiceNumber ?? string.Empty).Trim();

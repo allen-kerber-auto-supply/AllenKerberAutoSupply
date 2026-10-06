@@ -34,7 +34,9 @@
 
     <app-password-change *ngIf="authenticated && destination==='password-change'"></app-password-change>
 
-    <app-workspace-chooser *ngIf="authenticated && destination==='choose'" (workspaceSelected)="go($event)"></app-workspace-chooser>
+    <app-workspace-chooser *ngIf="authenticated && destination==='choose'" [canViewTrends]="roles.includes('TrendsUser')" (workspaceSelected)="go($event)"></app-workspace-chooser>
+
+    <app-trends *ngIf="authenticated && destination==='trends'"></app-trends>
 
     <section *ngIf="authenticated && destination==='sales'" class="workspace sales-workspace">
       <app-sales-navigation

@@ -7,6 +7,7 @@ public static class RoleNames
     public const string CustomerInvoiceUser = "CustomerInvoiceUser";
     public const string SalesAdmin = "SalesAdmin";
     public const string SalesUser = "SalesUser";
-    public static readonly string[] All = [InvoiceAdmin, InvoiceUser, CustomerInvoiceUser, SalesAdmin, SalesUser];
+    public const string TrendsUser = "TrendsUser";
+    public static readonly string[] All = [InvoiceAdmin, InvoiceUser, CustomerInvoiceUser, SalesAdmin, SalesUser, TrendsUser];
     public static readonly string[] Administrators = [InvoiceAdmin, SalesAdmin];
 }

@@ -77,7 +77,7 @@ these fields:
 - `MustChangePassword`: when `true`, the account must replace its temporary
   password after its next email/password sign-in
 - `Roles`: one or more of `InvoiceAdmin`, `InvoiceUser`,
-  `CustomerInvoiceUser`, `SalesAdmin`, or `SalesUser`
+  `CustomerInvoiceUser`, `SalesAdmin`, `SalesUser`, or `TrendsUser`
 
 There is no public registration or access-request workflow. User documents and
 password hashes can be provisioned by a user with an `InvoiceAdmin` or
@@ -86,3 +86,24 @@ password resets receive a temporary password and must change it before accessing
 protected application features. A Google
 account is not granted access unless its verified email matches a provisioned
 document with a recognized role.
+
+## Customer invoice trends
+
+Users with the `TrendsUser` role can select an inclusive date range, defaulting
+to month-to-date, and aggregate trends by invoice amount or invoice count. The
+Trends workspace compares the selected metric with the identical calendar range
+one year earlier. Customers with invoices in either period are included, with a
+zero value used when a customer is absent from one side of the comparison. Results
+are sorted with the most negative percentage changes first. Select a customer in
+the list to expand its details and show its graph; selecting the same customer
+again hides the graph. Amount mode includes the selected customer's full invoice
+history with invoice date and amount points. Count mode groups that history by
+calendar month and plots the invoice count for each month. Both modes provide
+hover details and spreadsheet-compatible CSV export.
+
+The backend uses a deterministic range key and caches each selected analysis as
+`trends/{key}.json` in the configured Google Cloud Storage image bucket. Storage
+is checked first; when the object is missing or stale, invoice data is queried,
+the result is generated, and the JSON object is replaced. Invoice counts are
+retained as supporting detail, but trend direction and ordering use the selected
+aggregate metric.

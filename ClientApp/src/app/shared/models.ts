@@ -146,5 +146,24 @@ export interface AccountSummary {
   calls?: SalesCall[];
 }
 
-export type Destination = 'invoice' | 'invoice-upload' | 'sales' | 'choose' | 'admin' | 'customer-admin' | 'password-change' | null;
+export interface TrendInvoicePoint {
+  invoiceDate: string; invoiceNumber: string; amount: number; comparisonPeriod: string;
+}
+export interface TrendCustomerResult {
+  customerNumber: number; customerName: string; priorYearInvoiceCount: number; currentInvoiceCount: number;
+  priorYearAmount: number; currentAmount: number; amountChange: number; amountChangePercent: number;
+  currentAggregate?: number; priorYearAggregate?: number; aggregateChange?: number; aggregateChangePercent?: number;
+  isDeclining: boolean; invoices: TrendInvoicePoint[];
+}
+export interface TrendData {
+  rangeKey: string; fromDate: string; toDate: string; priorYearFromDate: string; priorYearToDate: string;
+  generatedAt: string; analysisVersion: string; aggregateBy: 'amount' | 'count';
+  currentInvoiceCount: number; priorYearInvoiceCount: number;
+  customerCount: number; decliningCustomerCount: number; currentTotalAmount: number; priorYearTotalAmount: number;
+  currentTotalAggregate?: number; priorYearTotalAggregate?: number;
+  customers: TrendCustomerResult[];
+}
+export interface TrendAnalysisResponse { data: TrendData; cached: boolean; }
+
+export type Destination = 'invoice' | 'invoice-upload' | 'sales' | 'trends' | 'choose' | 'admin' | 'customer-admin' | 'password-change' | null;
 export type Theme = 'light' | 'dark';

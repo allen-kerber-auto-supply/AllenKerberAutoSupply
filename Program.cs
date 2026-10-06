@@ -42,6 +42,8 @@ builder.Services.AddSingleton<IInvoiceImageRepository, FirestoreInvoiceImageRepo
 builder.Services.AddSingleton<IUploadProgressEventBus, InvoiceUploadProgressEventBus>();
 builder.Services.AddSingleton<ICustomerRepository, FirestoreCustomerRepository>();
 builder.Services.AddSingleton<ISalesRepository, FirestoreSalesRepository>();
+builder.Services.AddSingleton<ITrendRepository, StorageTrendRepository>();
+builder.Services.AddSingleton<ITrendAnalysisService, TrendAnalysisService>();
 builder.Services.AddSingleton<IUserRoleStore, FirestoreUserRoleStore>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Identity.IPasswordHasher<UserAccount>,
     Microsoft.AspNetCore.Identity.PasswordHasher<UserAccount>>();
