@@ -50,69 +50,83 @@
         <input class="trend-filter" [(ngModel)]="filter" [ngModelOptions]="{standalone: true}" placeholder="Filter customers" aria-label="Filter customers">
       </div>
       <p *ngIf="!customers.length" class="muted-note">No customers were found in either comparison range.</p>
-      <div *ngFor="let customer of customers" class="trend-customer">
-        <button class="trend-customer-header" type="button" [class.selected]="selectedCustomerNumber === customer.customerNumber" (click)="toggle(customer.customerNumber)">
-          <span>
-            <b>{{customer.customerName || 'Customer ' + customer.customerNumber}}</b>
-            <small>#{{customer.customerNumber}} · {{customer.isDeclining ? 'Declining ' + (metricLabel | lowercase) : 'Growing or unchanged ' + (metricLabel | lowercase)}}</small>
-          </span>
-          <span class="trend-change" [class.negative]="customer.isDeclining">
-            {{customerAggregateChangePercent(customer) | number:'1.0-1'}}% · {{formatAggregateValue(customerAggregateChange(customer))}}
-          </span>
-        </button>
-        <div *ngIf="expandedCustomer === customer.customerNumber" class="trend-detail">
-          <div><strong>Prior-year {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerPriorYearAggregate(customer))}}</span></div>
-          <div><strong>Selected-range {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerCurrentAggregate(customer))}}</span></div>
-          <div><strong>Prior-year invoices</strong><span>{{customer.priorYearInvoiceCount}}</span></div>
-          <div><strong>Selected-range invoices</strong><span>{{customer.currentInvoiceCount}}</span></div>
-          <div *ngIf="selectedCustomer" class="card trend-chart trend-detail-chart">
-            <div class="table-header-row">
-              <div>
-                <p class="eyebrow">Selected customer</p>
-                <h2>{{customerLabel(selectedCustomer)}} invoice activity</h2>
-              </div>
-              <button class="button secondary export-button" type="button" (click)="exportGraph()">Export spreadsheet</button>
-            </div>
-            <div class="chart-summary">
-              <span><small>{{metricLabel}} change</small><strong [class.negative]="topDecliningAmountChange < 0">{{formatAggregateValue(topDecliningAmountChange)}}</strong></span>
-              <span><small>Percent change</small><strong [class.negative]="topDecliningAveragePercent < 0">{{topDecliningAveragePercent | number:'1.0-1'}}%</strong></span>
-              <span><small>Prior-year range</small><strong>{{displayDate(data.priorYearFromDate)}} - {{displayDate(data.priorYearToDate)}}</strong></span>
-              <span><small>Selected range</small><strong>{{displayDate(data.fromDate)}} - {{displayDate(data.toDate)}}</strong></span>
-            </div>
-            <div class="invoice-chart-wrap">
-              <svg class="invoice-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" aria-label="Invoice amount by invoice date for the selected customer">
-                <g *ngFor="let tick of chartYTicks">
-                  <line class="chart-grid" [attr.x1]="chartLeft" [attr.x2]="chartRight" [attr.y1]="invoiceY(tick)" [attr.y2]="invoiceY(tick)"></line>
-                  <text class="chart-axis-label" [attr.x]="chartLeft - 8" [attr.y]="invoiceY(tick) + 4" text-anchor="end">{{formatAggregateValue(tick)}}</text>
-                </g>
-                <line class="chart-axis" [attr.x1]="chartLeft" [attr.x2]="chartLeft" [attr.y1]="chartTop" [attr.y2]="chartBottom"></line>
-                <line class="chart-axis" [attr.x1]="chartLeft" [attr.x2]="chartRight" [attr.y1]="invoiceY(0)" [attr.y2]="invoiceY(0)"></line>
-                <text class="chart-label" [attr.x]="chartLeft" [attr.y]="chartBottom + 28" text-anchor="start">{{displayChartDate(chartDateTicks[0])}}</text>
-                <text class="chart-label" [attr.x]="(chartLeft + chartRight) / 2" [attr.y]="chartBottom + 28" text-anchor="middle">{{displayChartDate(chartDateTicks[1])}}</text>
-                <text class="chart-label" [attr.x]="chartRight" [attr.y]="chartBottom + 28" text-anchor="end">{{displayChartDate(chartDateTicks[2])}}</text>
-                <text class="chart-axis-title" [attr.x]="chartLeft" [attr.y]="chartTop - 8" text-anchor="start">{{metricLabel}}</text>
-                <polyline *ngIf="selectedCustomer && chartPointsFor(selectedCustomer).length > 1" class="chart-line" [style.stroke]="chartColor(0)" [attr.points]="invoiceChartPoints(selectedCustomer)"></polyline>
-                <g *ngIf="selectedCustomer">
-                  <g *ngFor="let point of chartPointsFor(selectedCustomer)">
-                    <circle class="chart-point" [style.fill]="chartColor(0)" [attr.cx]="invoiceX(point)" [attr.cy]="invoiceY(point.amount)" r="4"
-                      (mouseenter)="showTooltip(point, customerLabel(selectedCustomer), $event)" (mouseleave)="hideTooltip()"
-                      [attr.aria-label]="customerLabel(selectedCustomer) + ', ' + displayChartDate(point.invoiceDate) + ', ' + formatAggregateValue(point.amount)">
-                      <title>{{customerLabel(selectedCustomer)}} - {{displayChartDate(point.invoiceDate)}} - {{formatAggregateValue(point.amount)}}</title>
-                    </circle>
-                  </g>
-                </g>
-              </svg>
-              <div *ngIf="hoveredPoint" class="invoice-tooltip" [style.left.px]="hoveredPoint.x" [style.top.px]="hoveredPoint.y">
-                <strong>{{hoveredPoint.customerName}}</strong>
-                <span>{{displayChartDate(hoveredPoint.point.invoiceDate)}}</span>
-                <b>{{formatAggregateValue(hoveredPoint.point.amount)}}</b>
-              </div>
-            </div>
-            <div class="chart-legend">
-              <span><i class="legend-swatch" [style.background]="chartColor(0)"></i>{{customerLabel(selectedCustomer)}}</span>
-            </div>
-            <p class="chart-note">{{aggregateBy === 'count' ? 'Each point represents one calendar month and its invoice count.' : 'Each point represents one invoice across the selected customer full history.'}} Hover over a point for its date and value.</p>
+      <div *ngIf="customers.length" class="trend-customer-viewport">
+        <div *ngFor="let customer of customers; trackBy: trackCustomer" class="trend-customer">
+          <button class="trend-customer-header" type="button" [class.selected]="selectedCustomerNumber === customer.customerNumber" (click)="toggle(customer.customerNumber)">
+            <span>
+              <b>{{customer.customerName || 'Customer ' + customer.customerNumber}}</b>
+              <small>#{{customer.customerNumber}} · {{customer.isDeclining ? 'Declining ' + (metricLabel | lowercase) : 'Growing or unchanged ' + (metricLabel | lowercase)}}</small>
+            </span>
+            <span class="trend-change" [class.negative]="customer.isDeclining">
+              {{customerAggregateChangePercent(customer) | number:'1.0-1'}}% · {{formatAggregateValue(customerAggregateChange(customer))}}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="selectedCustomer" class="modal-backdrop" role="presentation" (click)="closeSelectedCustomer()">
+      <div class="card modal trend-detail-modal" role="dialog" aria-modal="true" aria-labelledby="trend-detail-title" (click)="$event.stopPropagation()">
+        <div class="trend-detail-modal-header">
+          <div>
+            <p class="eyebrow">Selected customer</p>
+            <h2 id="trend-detail-title">{{customerLabel(selectedCustomer)}} invoice activity</h2>
           </div>
+          <button class="button secondary" type="button" (click)="closeSelectedCustomer()">Close</button>
+        </div>
+        <div class="trend-detail">
+          <div><strong>Prior-year {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerPriorYearAggregate(selectedCustomer))}}</span></div>
+          <div><strong>Selected-range {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerCurrentAggregate(selectedCustomer))}}</span></div>
+          <div><strong>Prior-year invoices</strong><span>{{selectedCustomer.priorYearInvoiceCount}}</span></div>
+          <div><strong>Selected-range invoices</strong><span>{{selectedCustomer.currentInvoiceCount}}</span></div>
+        </div>
+        <div class="card trend-chart trend-detail-chart">
+          <div class="table-header-row">
+            <div>
+              <p class="eyebrow">Invoice activity</p>
+              <h2>{{customerLabel(selectedCustomer)}} invoice activity</h2>
+            </div>
+            <button class="button secondary export-button" type="button" (click)="exportGraph()">Export spreadsheet</button>
+          </div>
+          <div class="chart-summary">
+            <span><small>{{metricLabel}} change</small><strong [class.negative]="topDecliningAmountChange < 0">{{formatAggregateValue(topDecliningAmountChange)}}</strong></span>
+            <span><small>Percent change</small><strong [class.negative]="topDecliningAveragePercent < 0">{{topDecliningAveragePercent | number:'1.0-1'}}%</strong></span>
+            <span><small>Prior-year range</small><strong>{{displayDate(data.priorYearFromDate)}} - {{displayDate(data.priorYearToDate)}}</strong></span>
+            <span><small>Selected range</small><strong>{{displayDate(data.fromDate)}} - {{displayDate(data.toDate)}}</strong></span>
+          </div>
+          <div class="invoice-chart-wrap">
+            <svg class="invoice-chart" [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" aria-label="Invoice amount by invoice date for the selected customer">
+              <g *ngFor="let tick of chartYTicks">
+                <line class="chart-grid" [attr.x1]="chartLeft" [attr.x2]="chartRight" [attr.y1]="invoiceY(tick)" [attr.y2]="invoiceY(tick)"></line>
+                <text class="chart-axis-label" [attr.x]="chartLeft - 8" [attr.y]="invoiceY(tick) + 4" text-anchor="end">{{formatChartAxisValue(tick)}}</text>
+              </g>
+              <line class="chart-axis" [attr.x1]="chartLeft" [attr.x2]="chartLeft" [attr.y1]="chartTop" [attr.y2]="chartBottom"></line>
+              <line class="chart-axis" [attr.x1]="chartLeft" [attr.x2]="chartRight" [attr.y1]="invoiceY(0)" [attr.y2]="invoiceY(0)"></line>
+              <text class="chart-label" [attr.x]="chartLeft" [attr.y]="chartBottom + 28" text-anchor="start">{{displayChartDate(chartDateTicks[0])}}</text>
+              <text class="chart-label" [attr.x]="(chartLeft + chartRight) / 2" [attr.y]="chartBottom + 28" text-anchor="middle">{{displayChartDate(chartDateTicks[1])}}</text>
+              <text class="chart-label" [attr.x]="chartRight" [attr.y]="chartBottom + 28" text-anchor="end">{{displayChartDate(chartDateTicks[2])}}</text>
+              <text class="chart-axis-title" [attr.x]="chartLeft" [attr.y]="chartTop - 8" text-anchor="start">{{metricLabel}}</text>
+              <polyline *ngIf="selectedCustomer && chartPointsFor(selectedCustomer).length > 1" class="chart-line" [style.stroke]="chartColor(0)" [attr.points]="invoiceChartPoints(selectedCustomer)"></polyline>
+              <g *ngIf="selectedCustomer">
+                <g *ngFor="let point of chartPointsFor(selectedCustomer)">
+                  <circle class="chart-point" [style.fill]="chartColor(0)" [attr.cx]="invoiceX(point)" [attr.cy]="invoiceY(point.amount)" r="4"
+                    (mouseenter)="showTooltip(point, customerLabel(selectedCustomer), $event)" (mouseleave)="hideTooltip()"
+                    [attr.aria-label]="customerLabel(selectedCustomer) + ', ' + displayChartDate(point.invoiceDate) + ', ' + formatAggregateValue(point.amount)">
+                    <title>{{customerLabel(selectedCustomer)}} - {{displayChartDate(point.invoiceDate)}} - {{formatAggregateValue(point.amount)}}</title>
+                  </circle>
+                </g>
+              </g>
+            </svg>
+            <div *ngIf="hoveredPoint" class="invoice-tooltip" [style.left.px]="hoveredPoint.x" [style.top.px]="hoveredPoint.y">
+              <strong>{{hoveredPoint.customerName}}</strong>
+              <span>{{displayChartDate(hoveredPoint.point.invoiceDate)}}</span>
+              <b>{{formatAggregateValue(hoveredPoint.point.amount)}}</b>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-swatch" [style.background]="chartColor(0)"></i>{{customerLabel(selectedCustomer)}}</span>
+          </div>
+          <p class="chart-note">{{aggregateBy === 'count' ? 'Each point represents one calendar month and its invoice count.' : 'Each point represents one invoice across the selected customer full history.'}} Hover over a point for its date and value.</p>
         </div>
       </div>
     </div>

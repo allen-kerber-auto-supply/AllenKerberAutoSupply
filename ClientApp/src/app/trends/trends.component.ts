@@ -38,7 +38,6 @@ export class TrendsComponent {
   loading = false;
   error = '';
   filter = '';
-  expandedCustomer: number | null = null;
   selectedCustomerNumber: number | null = null;
   aggregateBy: 'amount' | 'count' = 'amount';
   hoveredPoint: TrendTooltip | null = null;
@@ -93,6 +92,13 @@ export class TrendsComponent {
   }
 
   get chartYTicks(): number[] {
+    if (this.aggregateBy === 'count') {
+      const max = Math.max(1, Math.ceil(this.chartMaxAmount));
+      const tickCount = Math.min(5, max + 1);
+      return Array.from({ length: tickCount }, (_, index) =>
+        Math.round(max - index * max / (tickCount - 1)));
+    }
+
     const step = (this.chartMaxAmount - this.chartMinAmount) / 4;
     return [
       this.chartMaxAmount,
@@ -101,6 +107,14 @@ export class TrendsComponent {
       this.chartMinAmount + step,
       this.chartMinAmount
     ];
+  }
+
+  formatChartAxisValue(value: number): string {
+    if (this.aggregateBy === 'count') {
+      const count = Math.round(value);
+      return `${count} invoice${count === 1 ? '' : 's'}`;
+    }
+    return this.formatAggregateValue(value);
   }
 
   get chartStartDate(): string {
@@ -156,7 +170,6 @@ export class TrendsComponent {
         this.data = response.data;
         this.hasSearched = true;
         this.aggregateBy = response.data.aggregateBy || this.aggregateBy;
-        this.expandedCustomer = null;
         this.selectedCustomerNumber = null;
         this.hoveredPoint = null;
         this.loading = false;
@@ -177,16 +190,23 @@ export class TrendsComponent {
     this.loading = false;
     this.error = '';
     this.filter = '';
-    this.expandedCustomer = null;
     this.selectedCustomerNumber = null;
     this.hoveredPoint = null;
   }
 
   toggle(customerNumber: number): void {
     const isSelected = this.selectedCustomerNumber === customerNumber;
-    this.expandedCustomer = isSelected ? null : customerNumber;
     this.selectedCustomerNumber = isSelected ? null : customerNumber;
     this.hoveredPoint = null;
+  }
+
+  closeSelectedCustomer(): void {
+    this.selectedCustomerNumber = null;
+    this.hoveredPoint = null;
+  }
+
+  trackCustomer(_index: number, customer: TrendCustomerResult): number {
+    return customer.customerNumber;
   }
 
   customerLabel(customer: TrendCustomerResult): string {

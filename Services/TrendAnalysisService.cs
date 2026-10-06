@@ -11,7 +11,7 @@ public sealed class TrendAnalysisService(
     ILogger<TrendAnalysisService> logger) : ITrendAnalysisService
 {
     private const int MaxCustomers = 2000;
-    private const string AnalysisVersion = "7";
+    private const string AnalysisVersion = "8";
 
     public async Task<TrendAnalysisResponse> AnalyzeAsync(
         DateOnly fromDate,
@@ -66,12 +66,11 @@ public sealed class TrendAnalysisService(
             throw new InvalidOperationException(
                 $"The selected range contains too many customers to analyze ({customers.Count}). Narrow the date range.");
 
-        var decliningCustomerNumbers = customers
-            .Where(customer => customer.IsDeclining)
+        var customerNumbers = customers
             .Select(customer => customer.CustomerNumber)
             .ToArray();
         var graphInvoices = await invoices.GetInvoicesForTrendCustomersAsync(
-            decliningCustomerNumbers,
+            customerNumbers,
             cancellationToken);
         AddInvoicePoints(customers, graphInvoices, priorFromDate, priorToDate, fromDate, toDate);
 
@@ -152,7 +151,6 @@ public sealed class TrendAnalysisService(
         DateOnly currentToDate)
     {
         var customersByNumber = customers
-            .Where(customer => customer.IsDeclining)
             .ToDictionary(customer => customer.CustomerNumber);
 
         foreach (var invoice in invoices.Where(invoice => invoice.CustomerNumber > 0 && invoice.InvoiceDate.HasValue))
