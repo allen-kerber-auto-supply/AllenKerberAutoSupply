@@ -14,7 +14,9 @@ export class AppHeaderComponent {
   @Input() authenticated = false;
   @Input() canManageUsers = false;
   @Input() canManageCustomers = false;
-  @Input() hasDualRoles = false;
+  @Input() canViewSales = false;
+  @Input() canViewInvoices = false;
+  @Input() canViewTrends = false;
   @Input() destination: Destination = null;
   @Input() name = '';
   @Input() initials = '';
@@ -23,7 +25,9 @@ export class AppHeaderComponent {
   @Output() themeToggle = new EventEmitter<void>();
   @Output() adminRequested = new EventEmitter<void>();
   @Output() customerAdminRequested = new EventEmitter<void>();
-  @Output() switchRequested = new EventEmitter<void>();
+  @Output() salesRequested = new EventEmitter<void>();
+  @Output() invoicesRequested = new EventEmitter<void>();
+  @Output() trendsRequested = new EventEmitter<void>();
   @Output() logoutRequested = new EventEmitter<void>();
 
   menuOpen = false;

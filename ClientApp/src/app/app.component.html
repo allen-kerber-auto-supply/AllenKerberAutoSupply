@@ -17,7 +17,9 @@
       [authenticated]="authenticated"
       [canManageUsers]="canManageUsers"
       [canManageCustomers]="canManageCustomers"
-      [hasDualRoles]="hasDualRoles"
+      [canViewSales]="canViewSales"
+      [canViewInvoices]="canViewInvoices"
+      [canViewTrends]="canViewTrends"
       [destination]="destination"
       [name]="name"
       [initials]="initials"
@@ -25,7 +27,9 @@
       (themeToggle)="toggleTheme()"
       (adminRequested)="go('admin')"
       (customerAdminRequested)="go('customer-admin')"
-      (switchRequested)="switchView()"
+      (salesRequested)="go('sales')"
+      (invoicesRequested)="go('invoice')"
+      (trendsRequested)="go('trends')"
       (logoutRequested)="logout()"></app-header>
 
     <app-access-denied *ngIf="denied"></app-access-denied>
