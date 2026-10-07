@@ -225,7 +225,6 @@ public sealed class InvoicesController(
             }
         }
 
-        rows = rows.Where(IsChargeInvoiceRow).ToList();
         var totalRows = rows.Count;
         var operation = "excel";
         uploadProgressEventBus.Publish(operation, "in_progress", 0, "Preparing to import invoice rows...", 0, totalRows);
@@ -272,15 +271,6 @@ public sealed class InvoicesController(
         var amount = ParseDecimal(GetRowValue(row, "invoice_amount", "invoiceAmount", "amount", "invoice total", "invoicetotal")) ?? 0m;
         var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
         var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
-        if (!IsChargeInvoice(transactionType, paymentMethod)
-            || string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(paymentMethod.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(paymentMethod.Trim(), "CHECK", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(transactionType.Trim(), "VOID", StringComparison.OrdinalIgnoreCase))
-        {
-            return (false, null);
-        }
-
         var employeeId = ParseInt(GetRowValue(row, "employee_no", "employeeNo", "employee", "employee number", "employeenumber")) ?? 0;
         var poNumber = GetRowValue(row, "po_number", "poNumber", "po number", "ponumber") ?? string.Empty;
         var actualStoreNumber = ParseInt(GetRowValue(row, "store_no", "storeNo", "store", "store number", "storenumber")) ?? storeNumber;
@@ -307,23 +297,6 @@ public sealed class InvoicesController(
         {
             return (false, $"Unable to import invoice {invoiceValue}: {ex.Message}");
         }
-    }
-
-    private static bool IsChargeInvoiceRow(Dictionary<string, string> row)
-    {
-        var transactionType = GetRowValue(row, "transaction_type", "transactionType", "txn_type", "transaction type", "transactiontype") ?? string.Empty;
-        var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
-        return IsChargeInvoice(transactionType, paymentMethod)
-            && !string.Equals(transactionType.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(paymentMethod.Trim(), "CASH", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(paymentMethod.Trim(), "CHECK", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(transactionType.Trim(), "VOID", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsChargeInvoice(string transactionType, string paymentMethod)
-    {
-        return string.Equals(transactionType.Trim(), "CHARGE", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(paymentMethod.Trim(), "CHARGE", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FirestoreCustomer? GetCustomerFromRow(Dictionary<string, string> row, int customerNumber)

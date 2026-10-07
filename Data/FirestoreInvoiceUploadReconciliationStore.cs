@@ -33,6 +33,7 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
 
         var missingInvoiceImages = invoiceSnapshot.Documents
             .Select(document => document.ConvertTo<Invoice>())
+            .Where(InvoiceRules.IsChargeInvoice)
             .Where(invoice => !string.IsNullOrWhiteSpace(invoice.InvoiceNumber))
             .ToList();
         var missingInvoices = imageSnapshot.Documents
