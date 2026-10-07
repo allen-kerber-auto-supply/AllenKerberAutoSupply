@@ -77,8 +77,6 @@
         <div class="trend-detail">
           <div><strong>Prior-year {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerPriorYearAggregate(selectedCustomer))}}</span></div>
           <div><strong>Selected-range {{metricLabel | lowercase}}</strong><span>{{formatAggregateValue(customerCurrentAggregate(selectedCustomer))}}</span></div>
-          <div><strong>Prior-year invoices</strong><span>{{selectedCustomer.priorYearInvoiceCount}}</span></div>
-          <div><strong>Selected-range invoices</strong><span>{{selectedCustomer.currentInvoiceCount}}</span></div>
         </div>
         <div class="card trend-chart trend-detail-chart">
           <div class="table-header-row">
