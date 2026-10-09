@@ -27,6 +27,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   reconciliation: InvoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
   missingImageDetails: InvoiceUploadMissingImage[] = [];
   missingInvoiceDrafts: Record<string, string> = {};
+  processingMissingInvoices = new Map<string, 'saving' | 'deleting'>();
   misreadBarcodes: MisreadBarcodeItem[] = [];
   misreadBarcodesLoading = false;
   misreadBarcodesError = '';
@@ -275,16 +276,23 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
 
   reassignMissingInvoice(invoiceNumber: string) {
     const replacement = (this.missingInvoiceDrafts[invoiceNumber] || '').trim();
-    if (!replacement || this.selectedStore <= 0) return;
+    if (!replacement || this.selectedStore <= 0 || this.isMissingInvoiceProcessing(invoiceNumber)) return;
     if (replacement === invoiceNumber.trim()) return;
 
+    this.processingMissingInvoices.set(invoiceNumber, 'saving');
     this.http.post('/api/invoice-images/reassign', {
       storeNumber: this.selectedStore,
       currentInvoiceNumber: invoiceNumber,
       newInvoiceNumber: replacement
     }).subscribe({
-      next: () => this.loadReconciliation(),
-      error: error => alert(error.error?.message || 'Unable to update the invoice number for this image.')
+      next: () => {
+        this.processingMissingInvoices.delete(invoiceNumber);
+        this.loadReconciliation();
+      },
+      error: error => {
+        this.processingMissingInvoices.delete(invoiceNumber);
+        alert(error.error?.message || 'Unable to update the invoice number for this image.');
+      }
     });
   }
 
@@ -297,11 +305,26 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   }
 
   deleteMissingImage(invoiceNumber: string) {
-    if (this.selectedStore <= 0 || !confirm(`Delete all images for invoice ${invoiceNumber}?`)) return;
+    if (this.selectedStore <= 0 || this.isMissingInvoiceProcessing(invoiceNumber) || !confirm(`Delete all images for invoice ${invoiceNumber}?`)) return;
+    this.processingMissingInvoices.set(invoiceNumber, 'deleting');
     this.http.delete(`/api/invoice-images/${this.selectedStore}/${encodeURIComponent(invoiceNumber)}`).subscribe({
-      next: () => this.loadReconciliation(),
-      error: error => alert(error.error?.message || 'Unable to delete the selected invoice images.')
+      next: () => {
+        this.processingMissingInvoices.delete(invoiceNumber);
+        this.loadReconciliation();
+      },
+      error: error => {
+        this.processingMissingInvoices.delete(invoiceNumber);
+        alert(error.error?.message || 'Unable to delete the selected invoice images.');
+      }
     });
+  }
+
+  isMissingInvoiceProcessing(invoiceNumber: string) {
+    return this.processingMissingInvoices.has(invoiceNumber);
+  }
+
+  missingInvoiceOperation(invoiceNumber: string) {
+    return this.processingMissingInvoices.get(invoiceNumber);
   }
 
   deleteMisread(item: MisreadBarcodeItem) {

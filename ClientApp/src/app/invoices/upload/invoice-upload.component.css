@@ -47,6 +47,22 @@
 	white-space: nowrap;
 }
 
+.missing-invoice-spinner {
+	display: inline-block;
+	width: .85rem;
+	height: .85rem;
+	margin-right: .35rem;
+	border: 2px solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: missing-invoice-spin .7s linear infinite;
+	vertical-align: middle;
+}
+
+@keyframes missing-invoice-spin {
+	to { transform: rotate(360deg); }
+}
+
 .store-selection-row {
 	display: flex;
 	align-items: flex-end;
