@@ -9,7 +9,10 @@
           <datalist id="customerNameOptions"><option *ngFor="let customer of customers" [value]="customer.customerName"></option></datalist>
           <div class="date-range"><label>From<input type="date" [(ngModel)]="dateFrom" [max]="dateTo"></label><label>To<input type="date" [(ngModel)]="dateTo" [min]="dateFrom" [max]="today"></label></div>
         </div>
-        <button class="button primary mt-2" type="button" (click)="search()">Search</button>
+        <button class="button primary mt-2" type="button" (click)="search()" [disabled]="loading" [attr.aria-busy]="loading">
+          <span *ngIf="loading" class="search-spinner" aria-hidden="true"></span>
+          {{loading ? 'Searching...' : 'Search'}}
+        </button>
         <p *ngIf="error" class="alert">{{error}}</p>
       </div>
     </div>
@@ -20,7 +23,7 @@
           <tbody><tr *ngFor="let invoice of invoices" class="invoice-row" [class.no-images]="invoice.hasImages === false"><td class="select-cell" (click)="$event.stopPropagation()"><input *ngIf="invoice.hasImages !== false" type="checkbox" [checked]="isSelected(invoice)" (change)="toggleSelection(invoice)"></td><td (click)="selectInvoice(invoice)"><b>{{invoice.invoiceNumber}}</b></td><td *ngIf="showCustomerNameColumn" (click)="selectInvoice(invoice)">{{invoice.customerName}}</td><td (click)="selectInvoice(invoice)">{{invoice.invoiceAmount | currency}}</td><td (click)="selectInvoice(invoice)">{{invoice.invoiceDate | date:'M/d/yyyy':'UTC'}}</td><td (click)="selectInvoice(invoice)">{{invoice.storeNumber}}</td></tr></tbody>
         </table><p *ngIf="loading" class="table-loading">Loading more invoices...</p></div>
       </div>
-      <div *ngIf="!invoices.length && searchPerformed" class="card state"><p>No invoices matched your search criteria.</p></div>
+      <div *ngIf="!invoices.length && searchPerformed && !loading" class="card state"><p>No invoices matched your search criteria.</p></div>
     </div>
   </div>
 </section>

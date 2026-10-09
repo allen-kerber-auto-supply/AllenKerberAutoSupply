@@ -465,19 +465,35 @@ public sealed class FirestoreInvoiceImageRepository(
 
         string imageDocId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoice_images").Document(imageDocId);
-        var invoiceDocument = await firestore.Collection("invoices")
-            .Document($"{storeNumber}_{normalized}")
-            .GetSnapshotAsync(cancellationToken);
-        var hasInvoice = invoiceDocument.Exists;
+        var invoiceCollection = firestore.Collection("invoices");
+        var directInvoiceDocument = invoiceCollection.Document(imageDocId);
+        DocumentReference? invoiceDocumentReference = directInvoiceDocument;
+        var directInvoiceSnapshot = await directInvoiceDocument.GetSnapshotAsync(cancellationToken);
+        if (!directInvoiceSnapshot.Exists)
+        {
+            var storeInvoices = await invoiceCollection
+                .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
+                .GetSnapshotAsync(cancellationToken);
+            var normalizedInvoiceNumber = NormalizeInvoiceNumber(normalized);
+            invoiceDocumentReference = storeInvoices.Documents
+                .FirstOrDefault(document => string.Equals(
+                    NormalizeInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
+                    normalizedInvoiceNumber,
+                    StringComparison.OrdinalIgnoreCase))
+                ?.Reference;
+        }
 
         string bucketName = gcpOptions.Value.ImageBucket;
         string resolvedContentType = string.IsNullOrWhiteSpace(contentType) ? "image/png" : contentType;
         string finalObjectName = string.Empty;
-        string primaryObjectName = string.Empty;
 
         await firestore.RunTransactionAsync(async transaction =>
         {
             var snapshot = await transaction.GetSnapshotAsync(docRef);
+            var invoiceSnapshot = invoiceDocumentReference is null
+                ? null
+                : await transaction.GetSnapshotAsync(invoiceDocumentReference);
+            var hasInvoice = invoiceSnapshot?.Exists == true;
             var lookup = snapshot.Exists ? snapshot.ConvertTo<InvoiceImageLookup>() : new InvoiceImageLookup
             {
                 StoreNumber = storeNumber,
@@ -522,21 +538,23 @@ public sealed class FirestoreInvoiceImageRepository(
 
             lookup.Pages = lookup.Pages.OrderBy(p => p.PageIndex).ToList();
             lookup.TotalPages = lookup.Pages.Count;
-            lookup.ObjectName = lookup.Pages[0].ObjectName;
-            primaryObjectName = lookup.ObjectName;
+            lookup.HasInvoice = hasInvoice;
+            lookup.BucketName = bucketName;
+            lookup.ContentType = resolvedContentType;
+            lookup.ObjectName = finalObjectName;
             lookup.UploadedAt = Timestamp.GetCurrentTimestamp();
 
             transaction.Set(docRef, lookup);
-        }, cancellationToken: cancellationToken);
 
-        if (invoiceDocument.Exists)
-        {
-            await invoiceDocument.Reference.UpdateAsync(new Dictionary<string, object>
+            if (invoiceDocumentReference is not null && invoiceSnapshot?.Exists == true)
             {
-                { nameof(Invoice.HasImages), true },
-                { nameof(Invoice.ImageObjectName), primaryObjectName }
-            }, cancellationToken: cancellationToken);
-        }
+                transaction.Update(invoiceDocumentReference, new Dictionary<string, object>
+                {
+                    { nameof(Invoice.HasImages), true },
+                    { nameof(Invoice.ImageObjectName), finalObjectName }
+                });
+            }
+        }, cancellationToken: cancellationToken);
 
         return finalObjectName;
     }
