@@ -17,6 +17,6 @@
       <label>Password<input [(ngModel)]="password" type="password" autocomplete="current-password" placeholder="Enter your password" (keyup.enter)="passwordLogin()"></label>
       <button class="button primary" type="button" (click)="passwordLogin()">Sign in &rarr;</button>
     </div>
-    <p *ngIf="error" class="alert">{{error}}</p>
+    <p *ngIf="error" class="alert" role="alert">{{error}}</p>
   </div>
 </section>

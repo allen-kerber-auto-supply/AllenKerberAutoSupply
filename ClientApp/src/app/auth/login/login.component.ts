@@ -24,8 +24,9 @@ export class LoginComponent {
       next: () => location.reload(),
       error: error => {
         this.error = error.status === 403
-          ? ''
-          : (error.error?.message || error.error || 'Unable to sign in.');
+          ? (error.error?.message || 'Your account is not authorized to use this application.')
+          : (error.error?.message
+            || (typeof error.error === 'string' ? error.error : 'Unable to sign in. Please check your email and password and try again.'));
       }
     });
   }
