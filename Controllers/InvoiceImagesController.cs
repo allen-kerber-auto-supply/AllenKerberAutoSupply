@@ -34,7 +34,7 @@ public sealed class InvoiceImagesController(IInvoiceImageRepository repository) 
         return File(stream, contentType);
     }
 
-    private static async Task<(Stream Stream, string ContentType)> NormalizeImageAsync(Stream sourceStream, string declaredContentType, CancellationToken cancellationToken)
+    internal static async Task<(Stream Stream, string ContentType)> NormalizeImageAsync(Stream sourceStream, string declaredContentType, CancellationToken cancellationToken)
     {
         if (string.Equals(declaredContentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
         {

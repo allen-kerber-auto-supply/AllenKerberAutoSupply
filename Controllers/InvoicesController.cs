@@ -444,7 +444,8 @@ public sealed class InvoicesController(
         if (stream is null)
             return NotFound("Misread barcode image not found.");
 
-        return File(stream, record.ContentType);
+        var (browserStream, contentType) = await InvoiceImagesController.NormalizeImageAsync(stream, record.ContentType, cancellationToken);
+        return File(browserStream, contentType);
     }
 
     [HttpPost("misread-barcodes/resolve")]
@@ -459,10 +460,12 @@ public sealed class InvoicesController(
             return BadRequest("An invoice number is required.");
         if (request.StoreNumber <= 0)
             return BadRequest("A store number is required.");
+        if (request.PageNumber <= 0)
+            return BadRequest("A page number is required.");
 
         try
         {
-            var objectName = await invoiceImageRepository.ResolveMisreadBarcodeAsync(request.Id, request.InvoiceNumber, request.StoreNumber, cancellationToken);
+            var objectName = await invoiceImageRepository.ResolveMisreadBarcodeAsync(request.Id, request.InvoiceNumber, request.StoreNumber, request.PageNumber, cancellationToken);
             return Ok(new { objectName });
         }
         catch (Exception ex)
@@ -679,6 +682,7 @@ public sealed class ResolveMisreadBarcodeRequest
     public string Id { get; set; } = string.Empty;
     public string InvoiceNumber { get; set; } = string.Empty;
     public int StoreNumber { get; set; }
+    public int PageNumber { get; set; } = 1;
 }
 
 public sealed class CreateInvoiceRequest

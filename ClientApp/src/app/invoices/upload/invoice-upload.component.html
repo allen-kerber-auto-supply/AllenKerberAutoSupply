@@ -1,14 +1,39 @@
 <section class="workspace invoice-workspace">
   <div class="heading invoice-upload-heading"><div><p class="eyebrow">Invoices</p><h1>Invoice Uploads</h1><p>Import Excel invoice data or upload a folder of scanned images for the selected store.</p></div><button class="button secondary" type="button" (click)="backRequested.emit()">Back to Invoice Lookup</button></div>
   <div class="card upload-panel">
-    <label>Store number
+    <div class="store-selection-row"><label>Store number
       <ng-container *ngIf="storeOptions.length; else noStores"><select class="store-select" [(ngModel)]="selectedStore" (change)="loadReconciliation()"><option [ngValue]="0">Select store...</option><option *ngFor="let store of storeOptions" [ngValue]="store">{{store}}</option></select></ng-container>
       <ng-template #noStores><div class="muted-note no-store-message">No store numbers are available yet. Import at least one invoice record first.</div></ng-template>
-    </label>
+    </label><button class="button secondary misread-open-button" type="button" (click)="showMisreadBarcodes()">Misread barcodes ({{misreadBarcodes.length}})</button></div>
     <div class="upload-actions"><label class="button secondary upload-file-label" [class.disabled]="selectedStore <= 0" [attr.aria-disabled]="selectedStore <= 0">Upload Excel<input type="file" accept=".xls,.xlsx,.csv" class="upload-hidden-input" [disabled]="selectedStore <= 0" (change)="uploadExcel($event)"></label><label class="button secondary upload-file-label" [class.disabled]="selectedStore <= 0" [attr.aria-disabled]="selectedStore <= 0">Upload Images<input type="file" multiple webkitdirectory directory class="upload-hidden-input" [disabled]="selectedStore <= 0" (change)="uploadImages($event)"></label></div>
     <div *ngIf="csvStatus" class="upload-status-block"><p class="notice upload-status">{{csvStatus}}</p><div class="upload-progress-wrap" aria-label="Excel upload progress"><div class="upload-progress-bar"><span [style.width.%]="csvProgress"></span></div><small>{{csvProgress}}%</small></div></div>
     <div *ngIf="imagesStatus" class="upload-status-block"><p class="notice upload-status">{{imagesStatus}}</p><div class="upload-progress-wrap" aria-label="Image upload progress"><div class="upload-progress-bar"><span [style.width.%]="imagesProgress"></span></div><small>{{imagesProgress}}%</small></div></div>
-    <div *ngIf="misreadBarcodes.length" class="upload-status-block"><p class="eyebrow">Misread barcode images</p><div class="misread-list"><div *ngFor="let item of misreadBarcodes" class="card misread-item"><div class="misread-item-header"><strong>{{item.fileName}}</strong><div class="misread-actions"><button class="button secondary" type="button" (click)="openMisread(item)">View</button><button class="button danger" type="button" (click)="deleteMisread(item)">Delete</button></div></div><label>Invoice number<input type="text" [(ngModel)]="drafts[item.id].invoiceNumber" name="misreadInvoice-{{item.id}}" placeholder="Enter invoice number"></label><label>Store number<select [(ngModel)]="drafts[item.id].storeNumber" name="misreadStore-{{item.id}}"><option [ngValue]="0">Select store...</option><option *ngFor="let store of storeOptions" [ngValue]="store">{{store}}</option></select></label><button class="button primary" type="button" (click)="resolveMisread(item)">Save image</button></div></div></div>
     <div class="upload-reconciliation-grid"><div class="card upload-list-card"><h3>Invoices missing images</h3><div *ngIf="missingImageDetails.length; else emptyInvoiceMissing" class="upload-missing-table-scroll"><table class="upload-missing-table"><thead><tr><th>Invoice number</th><th>Date</th><th>Customer name</th><th>Amount</th><th>Actions</th></tr></thead><tbody><tr *ngFor="let invoice of missingImageDetails"><td><b>{{invoice.invoiceNumber}}</b></td><td>{{invoice.invoiceDate | date:'M/d/yyyy':'UTC'}}</td><td>{{invoice.customerName}}</td><td>{{invoice.invoiceAmount | currency}}</td><td><button type="button" class="button danger" (click)="deleteMissingInvoice(invoice.invoiceNumber)">Delete</button></td></tr></tbody></table></div><ng-template #emptyInvoiceMissing><p class="muted-note empty-upload-message">No missing invoice-image matches for this store.</p></ng-template></div><div class="card upload-list-card"><h3>Images missing invoices</h3><ul *ngIf="reconciliation.missingInvoices.length; else emptyImageMissing"><li *ngFor="let invoiceKey of reconciliation.missingInvoices" class="missing-invoice-item"><button type="button" class="upload-missing-invoice-link" (click)="viewMissingInvoice(invoiceKey)">{{invoiceKey}}</button><div class="missing-invoice-editor"><input type="text" [ngModel]="missingInvoiceDrafts[invoiceKey]" (ngModelChange)="missingInvoiceDrafts[invoiceKey] = $event" aria-label="Correct invoice number"><button type="button" class="button secondary missing-invoice-save" (click)="reassignMissingInvoice(invoiceKey)">Save</button><button type="button" class="button danger" (click)="deleteMissingImage(invoiceKey)">Delete</button></div></li></ul><ng-template #emptyImageMissing><p class="muted-note empty-upload-message">No missing invoice records for this store.</p></ng-template></div></div>
   </div>
+  <dialog #misreadDialog class="misread-dialog" aria-labelledby="misread-dialog-title" (close)="onMisreadDialogClosed()">
+    <div class="misread-dialog-header"><h2 id="misread-dialog-title">{{selectedMisreadBarcode ? 'Review misread barcode' : 'Misread barcode images (' + misreadBarcodes.length + ')'}}</h2><button class="button secondary" type="button" (click)="closeMisreadBarcodes()">Close</button></div>
+    <p *ngIf="misreadSaveStatus" class="notice misread-save-status" role="status">{{misreadSaveStatus}}</p>
+    <div *ngIf="!selectedMisreadBarcode">
+      <p *ngIf="misreadBarcodesLoading" class="muted-note" role="status">Loading misread barcode images...</p>
+      <div *ngIf="misreadBarcodesError" class="notice upload-status" role="alert">{{misreadBarcodesError}} <button class="button secondary" type="button" (click)="loadMisreadBarcodes()">Retry</button></div>
+      <p *ngIf="!misreadBarcodesLoading && !misreadBarcodesError && !misreadBarcodes.length" class="muted-note">No misread barcode images to review.</p>
+      <div *ngIf="misreadBarcodes.length" class="misread-file-list"><div *ngFor="let item of misreadBarcodes" class="misread-file-row"><button class="misread-file-name" type="button" (click)="selectMisread(item)">{{item.fileName}}</button><button class="button danger" type="button" (click)="deleteMisread(item)">Delete</button></div></div>
+    </div>
+    <div *ngIf="selectedMisreadBarcode as item" class="misread-detail">
+      <div class="misread-detail-toolbar"><button class="button secondary" type="button" (click)="backToMisreadList()">Back to files</button><strong>{{item.fileName}}</strong></div>
+      <div class="misread-detail-controls">
+        <label>Store<select [(ngModel)]="misreadDraft.storeNumber" name="misreadStoreNumber"><option *ngFor="let store of misreadStoreOptions" [ngValue]="store">{{store}}</option></select></label>
+        <label>Page<select [(ngModel)]="misreadDraft.pageNumber" name="misreadPageNumber"><option *ngFor="let page of misreadPageOptions" [ngValue]="page">{{page}}</option></select></label>
+        <label>Invoice number<input type="text" [(ngModel)]="misreadDraft.invoiceNumber" name="misreadInvoiceNumber" placeholder="Invoice number" (keydown.enter)="saveMisreadFromEnter($event)"></label>
+        <button class="button primary" type="button" [disabled]="misreadSaving" (click)="resolveMisread()">{{misreadSaving ? 'Saving...' : 'Save image'}}</button>
+      </div>
+      <p *ngIf="misreadSaveError" class="notice upload-status" role="alert">{{misreadSaveError}}</p>
+      <p class="misread-preview-help">Preview opens at 2× zoom on the top-right corner. Scroll to inspect the rest of the image.</p>
+      <div class="misread-preview" aria-live="polite">
+        <p *ngIf="misreadImageLoading" class="muted-note" role="status">Loading image...</p>
+        <div *ngIf="misreadImageError" class="notice upload-status" role="alert">{{misreadImageError}} <button class="button secondary" type="button" (click)="loadMisreadImage(item)">Retry</button></div>
+        <img *ngIf="misreadImageUrl" [src]="misreadImageUrl" [alt]="item.fileName" (load)="zoomMisreadPreview($event)">
+      </div>
+    </div>
+  </dialog>
 </section>

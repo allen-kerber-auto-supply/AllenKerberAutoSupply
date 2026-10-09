@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpEventType } from '@angular/common/http';
-import { Component, EventEmitter, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { Invoice, InvoiceUploadMissingImage, InvoiceUploadReconciliation, MisreadBarcodeItem, UploadProgressState } from '../../shared/models';
 
 @Component({
@@ -13,6 +14,7 @@ import { Invoice, InvoiceUploadMissingImage, InvoiceUploadReconciliation, Misrea
 })
 export class InvoiceUploadComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
+  @ViewChild('misreadDialog') private misreadDialog!: ElementRef<HTMLDialogElement>;
   @Output() backRequested = new EventEmitter<void>();
   @Output() invoiceViewRequested = new EventEmitter<Invoice>();
 
@@ -26,7 +28,21 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   missingImageDetails: InvoiceUploadMissingImage[] = [];
   missingInvoiceDrafts: Record<string, string> = {};
   misreadBarcodes: MisreadBarcodeItem[] = [];
-  drafts: Record<string, { invoiceNumber: string; storeNumber: number }> = {};
+  misreadBarcodesLoading = false;
+  misreadBarcodesError = '';
+  selectedMisreadBarcode: MisreadBarcodeItem | null = null;
+  misreadImageUrl = '';
+  misreadImageLoading = false;
+  misreadImageError = '';
+  misreadDraft = { invoiceNumber: '', storeNumber: 0, pageNumber: 1 };
+  readonly misreadPageOptions = Array.from({ length: 10 }, (_, index) => index + 1);
+  get misreadStoreOptions(): number[] {
+    return [...new Set([...this.storeOptions, 302, 303, 304])].sort((a, b) => a - b);
+  }
+  misreadSaving = false;
+  misreadSaveError = '';
+  misreadSaveStatus = '';
+  private misreadImageRequest: Subscription | null = null;
   private excelTimer: number | null = null;
   private imagesTimer: number | null = null;
 
@@ -38,6 +54,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.stopTimer('excel');
     this.stopTimer('images');
+    this.clearMisreadImage();
   }
 
   loadStoreOptions() {
@@ -116,25 +133,132 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   }
 
   loadMisreadBarcodes() {
+    this.misreadBarcodesLoading = true;
+    this.misreadBarcodesError = '';
     this.http.get<MisreadBarcodeItem[]>('/api/invoices/misread-barcodes').subscribe({
       next: items => {
         this.misreadBarcodes = items || [];
-        this.drafts = Object.fromEntries(this.misreadBarcodes.map(item => [item.id, { invoiceNumber: '', storeNumber: this.selectedStore }]));
+        this.misreadBarcodesLoading = false;
       },
-      error: () => { this.misreadBarcodes = []; this.drafts = {}; }
+      error: error => {
+        this.misreadBarcodes = [];
+        this.misreadBarcodesLoading = false;
+        this.misreadBarcodesError = error.error?.message || 'Unable to load misread barcode images.';
+      }
     });
   }
 
-  openMisread(item: MisreadBarcodeItem) { window.open(`/api/invoices/misread-barcodes/${encodeURIComponent(item.id)}/view`, '_blank'); }
+  showMisreadBarcodes() {
+    const dialog = this.misreadDialog.nativeElement;
+    if (!dialog.open) dialog.showModal();
+    this.loadMisreadBarcodes();
+  }
 
-  resolveMisread(item: MisreadBarcodeItem) {
-    const draft = this.drafts[item.id] || { invoiceNumber: '', storeNumber: 0 };
-    if (!draft.invoiceNumber.trim()) { alert('Enter the invoice number before saving this image.'); return; }
-    if (!draft.storeNumber || draft.storeNumber <= 0) { alert('Select the store number before saving this image.'); return; }
-    this.http.post('/api/invoices/misread-barcodes/resolve', { id: item.id, invoiceNumber: draft.invoiceNumber.trim(), storeNumber: Number(draft.storeNumber) }).subscribe({
-      next: () => { this.loadMisreadBarcodes(); this.loadReconciliation(); },
-      error: error => alert(error.error?.message || 'Unable to resolve the selected misread barcode image.')
+  closeMisreadBarcodes() {
+    const dialog = this.misreadDialog.nativeElement;
+    if (dialog.open) dialog.close();
+    this.onMisreadDialogClosed();
+  }
+
+  onMisreadDialogClosed() {
+    this.resetMisreadSelection();
+    this.misreadSaveStatus = '';
+  }
+
+  selectMisread(item: MisreadBarcodeItem) {
+    this.clearMisreadImage();
+    this.selectedMisreadBarcode = item;
+    const fileName = item.fileName.toUpperCase();
+    const storeNumber = fileName.includes('TC') ? 304 : fileName.includes('LP') ? 302 : 303;
+    this.misreadDraft = { invoiceNumber: '', storeNumber, pageNumber: 1 };
+    this.misreadSaveError = '';
+    this.loadMisreadImage(item);
+  }
+
+  loadMisreadImage(item: MisreadBarcodeItem) {
+    this.misreadImageRequest?.unsubscribe();
+    this.misreadImageLoading = true;
+    this.misreadImageError = '';
+    this.misreadImageRequest = this.http.get(`/api/invoices/misread-barcodes/${encodeURIComponent(item.id)}/view`, { responseType: 'blob' }).subscribe({
+      next: image => {
+        if (this.selectedMisreadBarcode?.id !== item.id) return;
+        this.misreadImageUrl = URL.createObjectURL(image);
+        this.misreadImageLoading = false;
+      },
+      error: error => {
+        if (this.selectedMisreadBarcode?.id !== item.id) return;
+        this.misreadImageLoading = false;
+        this.misreadImageError = error.status === 404
+          ? 'This misread barcode image could not be found.'
+          : 'Unable to load this misread barcode image.';
+      }
     });
+  }
+
+  zoomMisreadPreview(event: Event) {
+    const image = event.currentTarget as HTMLImageElement;
+    const preview = image.parentElement;
+    if (!preview) return;
+    preview.scrollLeft = preview.scrollWidth;
+    preview.scrollTop = 0;
+  }
+
+  backToMisreadList() {
+    this.resetMisreadSelection();
+  }
+
+  saveMisreadFromEnter(event: Event) {
+    event.preventDefault();
+    this.resolveMisread();
+  }
+
+  resolveMisread() {
+    const item = this.selectedMisreadBarcode;
+    const invoiceNumber = this.misreadDraft.invoiceNumber.trim();
+    if (!item || this.misreadSaving) return;
+    if (!invoiceNumber) { this.misreadSaveError = 'Enter the invoice number before saving this image.'; return; }
+    if (!this.misreadDraft.storeNumber || this.misreadDraft.storeNumber <= 0) { this.misreadSaveError = 'Select the store number before saving this image.'; return; }
+
+    this.misreadSaving = true;
+    this.misreadSaveError = '';
+    this.misreadSaveStatus = '';
+    this.http.post('/api/invoices/misread-barcodes/resolve', {
+      id: item.id,
+      invoiceNumber,
+      storeNumber: Number(this.misreadDraft.storeNumber),
+      pageNumber: Number(this.misreadDraft.pageNumber)
+    }).subscribe({
+      next: () => {
+        this.misreadSaving = false;
+        this.misreadSaveStatus = `Saved ${item.fileName} to invoice ${invoiceNumber}.`;
+        const currentIndex = this.misreadBarcodes.findIndex(candidate => candidate.id === item.id);
+        const nextItem = currentIndex >= 0 ? this.misreadBarcodes[currentIndex + 1] : undefined;
+        this.misreadBarcodes = this.misreadBarcodes.filter(candidate => candidate.id !== item.id);
+        this.loadMisreadBarcodes();
+        this.loadReconciliation();
+        if (nextItem) this.selectMisread(nextItem);
+        else this.closeMisreadBarcodes();
+      },
+      error: error => {
+        this.misreadSaving = false;
+        this.misreadSaveError = (typeof error.error === 'string' ? error.error : error.error?.message)
+          || 'Unable to save the selected misread barcode image.';
+      }
+    });
+  }
+
+  resetMisreadSelection() {
+    this.clearMisreadImage();
+    this.selectedMisreadBarcode = null;
+    this.misreadSaveError = '';
+  }
+
+  private clearMisreadImage() {
+    this.misreadImageRequest?.unsubscribe();
+    this.misreadImageRequest = null;
+    if (this.misreadImageUrl) URL.revokeObjectURL(this.misreadImageUrl);
+    this.misreadImageUrl = '';
+    this.misreadImageLoading = false;
   }
 
   viewMissingInvoice(invoiceNumber: string) {

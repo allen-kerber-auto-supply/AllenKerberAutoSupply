@@ -13,6 +13,6 @@ public interface IInvoiceImageRepository
     Task<List<MisreadBarcodeRecord>> ListMisreadBarcodesAsync(CancellationToken cancellationToken = default);
     Task<MisreadBarcodeRecord?> GetMisreadBarcodeAsync(string id, CancellationToken cancellationToken = default);
     Task<Stream?> GetMisreadBarcodeStreamAsync(string id, CancellationToken cancellationToken = default);
-    Task<string> ResolveMisreadBarcodeAsync(string id, string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default);
+    Task<string> ResolveMisreadBarcodeAsync(string id, string invoiceNumber, int storeNumber, int pageNumber = 1, CancellationToken cancellationToken = default);
     Task DeleteMisreadBarcodeAsync(string id, CancellationToken cancellationToken = default);
 }
