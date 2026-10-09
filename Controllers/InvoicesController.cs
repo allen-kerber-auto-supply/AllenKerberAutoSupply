@@ -273,8 +273,6 @@ public sealed class InvoicesController(
         var paymentMethod = GetRowValue(row, "payment_method", "paymentMethod", "payment method", "paymentmethod") ?? string.Empty;
         var employeeId = ParseInt(GetRowValue(row, "employee_no", "employeeNo", "employee", "employee number", "employeenumber")) ?? 0;
         var poNumber = GetRowValue(row, "po_number", "poNumber", "po number", "ponumber") ?? string.Empty;
-        var actualStoreNumber = ParseInt(GetRowValue(row, "store_no", "storeNo", "store", "store number", "storenumber")) ?? storeNumber;
-
         try
         {
             if (customer is not null)
@@ -287,7 +285,7 @@ public sealed class InvoicesController(
                 amount,
                 transactionType,
                 employeeId,
-                actualStoreNumber,
+                storeNumber,
                 paymentMethod,
                 poNumber,
                 cancellationToken);

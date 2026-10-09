@@ -26,6 +26,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   imagesProgress = 0;
   reconciliation: InvoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
   missingImageDetails: InvoiceUploadMissingImage[] = [];
+  missingImageDateSortDirection: 'asc' | 'desc' = 'desc';
   missingInvoiceDrafts: Record<string, string> = {};
   processingMissingInvoices = new Map<string, 'saving' | 'deleting'>();
   misreadBarcodes: MisreadBarcodeItem[] = [];
@@ -80,8 +81,55 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         this.missingInvoiceDrafts = Object.fromEntries(
           this.reconciliation.missingInvoices.map(invoiceNumber => [invoiceNumber, invoiceNumber]));
         this.missingImageDetails = this.reconciliation.missingInvoiceImages;
+        this.sortMissingImageDetailsByDate();
       },
       error: () => { this.reconciliation = { missingInvoiceImages: [], missingInvoices: [] }; this.missingImageDetails = []; }
+    });
+  }
+
+  toggleMissingImageDateSort() {
+    this.missingImageDateSortDirection = this.missingImageDateSortDirection === 'asc' ? 'desc' : 'asc';
+    this.sortMissingImageDetailsByDate();
+  }
+
+  exportMissingImageDetails() {
+    const escapeCsvCell = (value: string | number) => {
+      const text = String(value);
+      const safeText = typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${safeText.replace(/"/g, '""')}"`;
+    };
+    const header = ['Invoice number', 'Date', 'Customer name', 'Amount'];
+    const rows = this.missingImageDetails.map(invoice => {
+      const timestamp = invoice.invoiceDate ? Date.parse(invoice.invoiceDate) : NaN;
+      const date = Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : '';
+      return [
+        escapeCsvCell(invoice.invoiceNumber),
+        escapeCsvCell(date),
+        escapeCsvCell(invoice.customerName),
+        escapeCsvCell(invoice.invoiceAmount)
+      ].join(',');
+    });
+    const csv = `\uFEFF${[header.map(escapeCsvCell).join(','), ...rows].join('\r\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `invoices_missing_images_store_${this.selectedStore}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  private sortMissingImageDetailsByDate() {
+    const direction = this.missingImageDateSortDirection === 'asc' ? 1 : -1;
+    this.missingImageDetails = [...this.missingImageDetails].sort((left, right) => {
+      const leftDate = left.invoiceDate ? Date.parse(left.invoiceDate) : NaN;
+      const rightDate = right.invoiceDate ? Date.parse(right.invoiceDate) : NaN;
+      const leftHasDate = Number.isFinite(leftDate);
+      const rightHasDate = Number.isFinite(rightDate);
+      if (!leftHasDate || !rightHasDate) return leftHasDate === rightHasDate ? 0 : leftHasDate ? -1 : 1;
+      return (leftDate - rightDate) * direction;
     });
   }
 
