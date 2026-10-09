@@ -160,7 +160,7 @@ public sealed class FirestoreInvoiceRepository(
         return await GetChargeInvoiceSearchPageAsync(query, sortKey, sortDirection, page, cancellationToken);
     }
 
-    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
+    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default, int? storeNumber = null)
     {
         var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
         var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
@@ -168,6 +168,10 @@ public sealed class FirestoreInvoiceRepository(
         Query query = firestore.Collection("invoices")
             .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
             .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
+        if (storeNumber.HasValue)
+        {
+            query = query.WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber.Value);
+        }
         return await GetChargeInvoiceSearchPageAsync(query, sortKey, sortDirection, page, cancellationToken);
     }
 
@@ -379,7 +383,7 @@ public sealed class FirestoreInvoiceRepository(
 
     public async Task<bool> UpsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default)
     {
-        string normalized = (invoiceNumber ?? string.Empty).Trim();
+        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
         string docId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoices").Document(docId);
         var imageDocument = await firestore.Collection("invoice_images")
@@ -422,7 +426,7 @@ public sealed class FirestoreInvoiceRepository(
 
     public async Task<bool> InsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default)
     {
-        string normalized = (invoiceNumber ?? string.Empty).Trim();
+        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
         string docId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoices").Document(docId);
 

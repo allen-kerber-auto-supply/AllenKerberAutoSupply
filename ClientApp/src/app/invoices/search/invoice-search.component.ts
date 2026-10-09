@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InvoiceSearchPage, InvoiceService } from '../invoice.service';
 import { CustomerSummary, Invoice } from '../../shared/models';
@@ -13,7 +13,7 @@ type InvoiceSortKey = 'invoiceDate' | 'invoiceAmount' | 'customerName' | 'custom
   templateUrl: './invoice-search.component.html',
   styleUrls: ['./invoice-search.component.css']
 })
-export class InvoiceSearchComponent {
+export class InvoiceSearchComponent implements OnInit {
   private readonly invoiceService = inject(InvoiceService);
 
   @Input() customers: CustomerSummary[] = [];
@@ -24,6 +24,8 @@ export class InvoiceSearchComponent {
 
   invoiceNumber = '';
   customerName = '';
+  selectedStore = 0;
+  storeOptions: number[] = [];
   dateFrom = this.dateValue(-30);
   dateTo = this.dateValue(0);
   today = this.dateValue(0);
@@ -40,6 +42,13 @@ export class InvoiceSearchComponent {
   hasMore = false;
   totalCount = 0;
   loading = false;
+
+  ngOnInit() {
+    this.invoiceService.getStoreNumbers().subscribe({
+      next: stores => this.storeOptions = [...stores].sort((a, b) => a - b),
+      error: () => this.error = 'Unable to load store numbers.'
+    });
+  }
 
   search() {
     this.error = '';
@@ -131,7 +140,7 @@ export class InvoiceSearchComponent {
     const customerNumber = customerName ? this.resolveCustomerNumber(customerName) : undefined;
     const request = invoiceNumber
       ? this.invoiceService.searchByNumber(invoiceNumber, this.invoiceSortKey, this.invoiceSortDirection, page)
-      : this.invoiceService.searchByDate(this.dateFrom, this.dateTo, customerNumber ?? undefined, this.invoiceSortKey, this.invoiceSortDirection, page);
+      : this.invoiceService.searchByDate(this.dateFrom, this.dateTo, customerNumber ?? undefined, this.invoiceSortKey, this.invoiceSortDirection, page, customerNumber == null ? this.selectedStore || undefined : undefined);
 
     if (!append) {
       this.selectedInvoiceKeys.clear();

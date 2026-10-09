@@ -33,6 +33,24 @@
 	padding: .62rem .75rem;
 }
 
+.store-filter {
+	display: flex;
+	flex-direction: column;
+	gap: .3rem;
+	color: var(--muted);
+	font-size: .7rem;
+	font-weight: 800;
+}
+
+.store-filter select {
+	width: 100%;
+	padding: .62rem .75rem;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: var(--surface);
+	color: var(--text);
+}
+
 .invoice-search-col .input-with-clear input[list] {
 	width: 100%;
 	padding-right: 2.75rem;
@@ -140,7 +158,8 @@
 
 .invoice-workspace {
 	margin-bottom: 0;
-	padding-bottom: 5rem;
+	padding-top: .75rem;
+	padding-bottom: 1rem;
 }
 
 .invoice-results-col {

@@ -5,7 +5,7 @@ namespace AllenKerberAutoSupply.Data;
 public interface IInvoiceRepository
 {
     Task<InvoiceSearchPage> FindAsync(string? invoiceNumber, string? customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default);
-    Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default);
+    Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default, int? storeNumber = null);
     Task<InvoiceSearchPage> GetInvoiceDataByDtmAndCustomerAsync(DateTime beginDate, DateTime endDate, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Invoice>> GetInvoicesForTrendAsync(DateTime beginDate, DateTime endDate, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Invoice>> GetInvoicesForTrendCustomersAsync(IReadOnlyCollection<int> customerNumbers, CancellationToken cancellationToken = default);

@@ -451,7 +451,7 @@ public sealed class FirestoreInvoiceImageRepository(
 
     public async Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default)
     {
-        string normalized = (invoiceNumber ?? string.Empty).Trim();
+        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
 
         if (invoiceOnly)
         {

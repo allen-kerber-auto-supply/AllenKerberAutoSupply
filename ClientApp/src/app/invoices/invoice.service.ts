@@ -17,13 +17,18 @@ export class InvoiceService {
     return this.http.get<InvoiceSearchPage>(`/api/invoices?invoiceNumber=${encodeURIComponent(invoiceNumber)}&page=0`);
   }
 
+  getStoreNumbers(): Observable<number[]> {
+    return this.http.get<number[]>('/api/invoices/stores');
+  }
+
   searchByNumber(invoiceNumber: string, sortKey: string, sortDirection: string, page: number): Observable<InvoiceSearchPage> {
     return this.http.get<InvoiceSearchPage>('/api/invoices', { params: { invoiceNumber, sortKey, sortDirection, page } });
   }
 
-  searchByDate(beginDate: string, endDate: string, customerNumber: number | undefined, sortKey: string, sortDirection: string, page: number): Observable<InvoiceSearchPage> {
+  searchByDate(beginDate: string, endDate: string, customerNumber: number | undefined, sortKey: string, sortDirection: string, page: number, storeNumber?: number): Observable<InvoiceSearchPage> {
     const params: Record<string, string | number> = { beginDate, endDate, sortKey, sortDirection, page };
     if (customerNumber != null) params['customerNumber'] = String(customerNumber);
+    if (customerNumber == null && storeNumber != null) params['storeNumber'] = String(storeNumber);
     return this.http.get<InvoiceSearchPage>('/api/invoices/by-date', { params });
   }
 }

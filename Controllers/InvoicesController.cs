@@ -102,7 +102,7 @@ public sealed class InvoicesController(
     }
 
     [HttpGet("by-date")]
-    public async Task<IActionResult> GetByDate([FromQuery] DateTime beginDate, [FromQuery] DateTime endDate, [FromQuery] int? customerNumber, [FromQuery] string? sortKey, [FromQuery] string? sortDirection, [FromQuery] int page = 0, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetByDate([FromQuery] DateTime beginDate, [FromQuery] DateTime endDate, [FromQuery] int? customerNumber, [FromQuery] int? storeNumber, [FromQuery] string? sortKey, [FromQuery] string? sortDirection, [FromQuery] int page = 0, CancellationToken cancellationToken = default)
     {
         page = Math.Max(0, page);
         if (customerNumber.HasValue)
@@ -110,7 +110,7 @@ public sealed class InvoicesController(
             return Ok(await repository.GetInvoiceDataByDtmAndCustomerAsync(beginDate, endDate, customerNumber.Value, sortKey, sortDirection, page, cancellationToken));
         }
 
-        return Ok(await repository.GetInvoiceDataByDtmAsync(beginDate, endDate, sortKey, sortDirection, page, cancellationToken));
+        return Ok(await repository.GetInvoiceDataByDtmAsync(beginDate, endDate, sortKey, sortDirection, page, cancellationToken, storeNumber));
     }
 
     [HttpGet("statement")]
@@ -670,8 +670,7 @@ public sealed class InvoicesController(
         if (string.IsNullOrWhiteSpace(digits))
             return string.Empty;
 
-        var trimmed = digits.TrimStart('0');
-        return string.IsNullOrEmpty(trimmed) ? "0" : trimmed;
+        return InvoiceNumberNormalizer.NormalizeForStorage(digits);
     }
 }
 
