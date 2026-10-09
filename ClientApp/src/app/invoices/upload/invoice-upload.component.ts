@@ -50,6 +50,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   private uploadStateVersion = 0;
 
   ngOnInit() {
+    this.clearUploadState();
     this.loadStoreOptions();
     this.loadMisreadBarcodes();
   }
@@ -149,8 +150,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    if (!this.requireStore('csv')) { input.value = ''; return; }
     this.clearUploadState();
+    if (!this.requireStore('csv')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
     const formData = new FormData();
     formData.append('excelFile', file, file.name);
@@ -179,8 +180,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
     if (!files.length) return;
-    if (!this.requireStore('images')) { input.value = ''; return; }
     this.clearUploadState();
+    if (!this.requireStore('images')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
     const formData = new FormData();
     for (const file of files) formData.append('files', file, file.name);
