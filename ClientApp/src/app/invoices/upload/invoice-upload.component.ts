@@ -47,6 +47,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   private misreadImageRequest: Subscription | null = null;
   private excelTimer: number | null = null;
   private imagesTimer: number | null = null;
+  private uploadStateVersion = 0;
 
   ngOnInit() {
     this.loadStoreOptions();
@@ -54,8 +55,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.stopTimer('excel');
-    this.stopTimer('images');
+    this.clearUploadState();
     this.clearMisreadImage();
   }
 
@@ -63,10 +63,22 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.http.get<number[]>('/api/invoices/stores').subscribe({
       next: stores => {
         this.storeOptions = (stores || []).sort((a, b) => a - b);
-        if (!this.storeOptions.includes(this.selectedStore)) this.selectedStore = 0;
+        if (!this.storeOptions.includes(this.selectedStore)) {
+          this.selectedStore = 0;
+          this.clearUploadState();
+        }
       },
-      error: () => { this.storeOptions = []; this.selectedStore = 0; }
+      error: () => {
+        this.storeOptions = [];
+        this.selectedStore = 0;
+        this.clearUploadState();
+      }
     });
+  }
+
+  storeChanged() {
+    this.clearUploadState();
+    this.loadReconciliation();
   }
 
   loadReconciliation() {
@@ -138,6 +150,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const file = input.files?.[0];
     if (!file) return;
     if (!this.requireStore('csv')) { input.value = ''; return; }
+    this.clearUploadState();
+    const stateVersion = this.uploadStateVersion;
     const formData = new FormData();
     formData.append('excelFile', file, file.name);
     formData.append('storeNumber', String(this.selectedStore));
@@ -145,6 +159,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.stopTimer('excel'); this.startTimer('excel');
     this.http.post<any>('/api/invoices/upload-excel', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
+        if (stateVersion !== this.uploadStateVersion) return;
         if (event.type !== HttpEventType.Response || !event.body) return;
         const imported = event.body.imported ?? 0;
         const errors = event.body.errors?.length ? ` ${event.body.errors.join(' ')}` : '';
@@ -152,7 +167,10 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         this.csvStatus = `Excel imported successfully (${imported} invoice${imported === 1 ? '' : 's'}).${errors}`;
         this.loadReconciliation(); this.loadMisreadBarcodes();
       },
-      error: error => { this.stopTimer('excel'); this.csvStatus = error.error?.message || 'Unable to import the selected Excel file.'; this.csvProgress = 0; },
+      error: error => {
+        if (stateVersion !== this.uploadStateVersion) return;
+        this.stopTimer('excel'); this.csvStatus = error.error?.message || 'Unable to import the selected Excel file.'; this.csvProgress = 0;
+      },
       complete: () => input.value = ''
     });
   }
@@ -162,6 +180,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const files = Array.from(input.files || []);
     if (!files.length) return;
     if (!this.requireStore('images')) { input.value = ''; return; }
+    this.clearUploadState();
+    const stateVersion = this.uploadStateVersion;
     const formData = new FormData();
     for (const file of files) formData.append('files', file, file.name);
     formData.append('storeNumber', String(this.selectedStore));
@@ -169,6 +189,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.stopTimer('images'); this.startTimer('images');
     this.http.post<any>('/api/invoices/upload-images', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
+        if (stateVersion !== this.uploadStateVersion) return;
         if (event.type !== HttpEventType.Response || !event.body) return;
         const processed = event.body.processed ?? 0;
         const errors = event.body.errors?.length ? ` ${event.body.errors.join(' ')}` : '';
@@ -176,7 +197,10 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         this.imagesStatus = `Processed ${processed} image${processed === 1 ? '' : 's'}.${errors}`;
         this.loadReconciliation(); this.loadMisreadBarcodes();
       },
-      error: error => { this.stopTimer('images'); this.imagesStatus = error.error?.message || 'Unable to upload the selected image folder.'; this.imagesProgress = 0; },
+      error: error => {
+        if (stateVersion !== this.uploadStateVersion) return;
+        this.stopTimer('images'); this.imagesStatus = error.error?.message || 'Unable to upload the selected image folder.'; this.imagesProgress = 0;
+      },
       complete: () => input.value = ''
     });
   }
@@ -391,8 +415,10 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   }
 
   private startTimer(type: 'excel' | 'images') {
+    const stateVersion = this.uploadStateVersion;
     const poll = () => this.http.get<UploadProgressState>(`/api/invoices/progress?operation=${type}`).subscribe({
       next: state => {
+        if (stateVersion !== this.uploadStateVersion) return;
         const percent = Math.max(0, Math.min(100, Number(state?.percent) || 0));
         if (type === 'excel') { this.csvProgress = percent; this.csvStatus = state.message || 'Uploading Excel file...'; }
         else { this.imagesProgress = percent; this.imagesStatus = state.message || 'Uploading images...'; }
@@ -409,5 +435,15 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const timer = type === 'excel' ? this.excelTimer : this.imagesTimer;
     if (timer !== null) window.clearInterval(timer);
     if (type === 'excel') this.excelTimer = null; else this.imagesTimer = null;
+  }
+
+  private clearUploadState() {
+    this.uploadStateVersion++;
+    this.stopTimer('excel');
+    this.stopTimer('images');
+    this.csvStatus = '';
+    this.csvProgress = 0;
+    this.imagesStatus = '';
+    this.imagesProgress = 0;
   }
 }
