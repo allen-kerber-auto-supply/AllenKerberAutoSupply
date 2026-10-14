@@ -3,6 +3,9 @@ using AllenKerberAutoSupply.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using PdfSharpCore.Drawing;
+using PdfSharpCore.Pdf;
+using PdfSharpCore.Pdf.IO;
 using Resend;
 
 namespace AllenKerberAutoSupply.Controllers;
@@ -39,7 +42,9 @@ public sealed class InvoiceEmailController(
             var attachments = new List<EmailAttachment>();
             foreach (var invoice in invoices)
             {
-                attachments.AddRange(await BuildAttachmentsAsync(invoice, cancellationToken).ConfigureAwait(false));
+                var attachment = await BuildAttachmentAsync(invoice, cancellationToken).ConfigureAwait(false);
+                if (attachment is not null)
+                    attachments.Add(attachment);
             }
 
             if (attachments.Count == 0)
@@ -86,14 +91,15 @@ public sealed class InvoiceEmailController(
         return Ok(results);
     }
 
-    private async Task<List<EmailAttachment>> BuildAttachmentsAsync(InvoiceAttachmentRequest invoice, CancellationToken cancellationToken)
+    private async Task<EmailAttachment?> BuildAttachmentAsync(InvoiceAttachmentRequest invoice, CancellationToken cancellationToken)
     {
-        var attachments = new List<EmailAttachment>();
         if (string.IsNullOrWhiteSpace(invoice.InvoiceNumber))
-            return attachments;
+            return null;
 
         var lookup = await imageRepository.GetInvoiceImageLookupAsync(invoice.InvoiceNumber, invoice.StoreNumber, cancellationToken).ConfigureAwait(false);
         var totalPages = lookup?.Pages.Count > 0 ? lookup.Pages.Count : 1;
+        using var pdf = new PdfDocument();
+        var pageCount = 0;
 
         for (var page = 1; page <= totalPages; page++)
         {
@@ -112,21 +118,41 @@ public sealed class InvoiceEmailController(
                 var contentType = lookup?.Pages.Count > 0
                     ? (lookup.Pages.FirstOrDefault(p => p.PageIndex == page)?.ContentType ?? "image/png")
                     : (lookup?.ContentType ?? "image/png");
-                var extension = contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ? "pdf" : "png";
-                var filename = totalPages > 1
-                    ? $"{invoice.InvoiceNumber}-page{page}.{extension}"
-                    : $"{invoice.InvoiceNumber}.{extension}";
 
-                attachments.Add(new EmailAttachment
+                if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ||
+                    bytes.AsSpan().StartsWith("%PDF"u8))
                 {
-                    Filename = filename,
-                    Content = bytes,
-                    ContentType = contentType,
-                });
+                    using var sourcePdf = PdfReader.Open(new MemoryStream(bytes), PdfDocumentOpenMode.Import);
+                    for (var sourcePage = 0; sourcePage < sourcePdf.PageCount; sourcePage++)
+                    {
+                        pdf.AddPage(sourcePdf.Pages[sourcePage]);
+                        pageCount++;
+                    }
+                }
+                else
+                {
+                    using var image = XImage.FromStream(() => new MemoryStream(bytes));
+                    var pdfPage = pdf.AddPage();
+                    pdfPage.Width = image.PointWidth;
+                    pdfPage.Height = image.PointHeight;
+                    using var graphics = XGraphics.FromPdfPage(pdfPage);
+                    graphics.DrawImage(image, 0, 0, pdfPage.Width, pdfPage.Height);
+                    pageCount++;
+                }
             }
         }
 
-        return attachments;
+        if (pageCount == 0)
+            return null;
+
+        using var output = new MemoryStream();
+        pdf.Save(output, false);
+        return new EmailAttachment
+        {
+            Filename = $"{invoice.InvoiceNumber}.pdf",
+            Content = output.ToArray(),
+            ContentType = "application/pdf",
+        };
     }
 }
 
