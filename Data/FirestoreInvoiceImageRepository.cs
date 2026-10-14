@@ -544,7 +544,7 @@ public sealed class FirestoreInvoiceImageRepository(
             lookup.ObjectName = finalObjectName;
             lookup.UploadedAt = Timestamp.GetCurrentTimestamp();
 
-            transaction.Set(docRef, lookup);
+            transaction.Set(docRef, lookup, SetOptions.Overwrite);
 
             if (invoiceDocumentReference is not null && invoiceSnapshot?.Exists == true)
             {
@@ -645,7 +645,7 @@ public sealed class FirestoreInvoiceImageRepository(
         lookup.HasInvoice = replacementInvoiceDocument is not null;
         await firestore.RunTransactionAsync(async transaction =>
         {
-            transaction.Set(targetReference, lookup);
+            transaction.Set(targetReference, lookup, SetOptions.Overwrite);
             foreach (var document in sourceDocuments)
             {
                 if (document.Id != targetReference.Id)
