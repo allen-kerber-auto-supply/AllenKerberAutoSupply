@@ -63,6 +63,13 @@ The root shell is defined by `main.ts`, `app.component.html`, and
 transport services, while the root shell coordinates authentication, workspace
 selection, and cross-feature navigation.
 
+## Backend structure
+
+Backend code is grouped by responsibility: `Repository` contains repository
+contracts and implementations, `Stores` contains persistence stores,
+`Services` contains application services, and `Factories`, `Mappers`,
+`Normalizers`, and `Caches` contain their corresponding helpers.
+
 ## User provisioning and authorization
 
 Both Google and email/password sign-in require a matching document in the
