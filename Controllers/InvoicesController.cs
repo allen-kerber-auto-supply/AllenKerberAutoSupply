@@ -25,6 +25,7 @@ public sealed class InvoicesController(
     IInvoiceRepository repository,
     ICustomerRepository customerRepository,
     IInvoiceImageRepository invoiceImageRepository,
+    IMisreadBarcodeService misreadBarcodeService,
     IInvoiceStoreCache invoiceStoreCache,
     IUploadProgressEventBus uploadProgressEventBus,
     IOptions<GoogleCloudOptions> googleCloudOptions) : ControllerBase
@@ -376,7 +377,7 @@ public sealed class InvoicesController(
                 if (string.IsNullOrWhiteSpace(invoiceNumber))
                 {
                     await using var source = file.OpenReadStream();
-                    await invoiceImageRepository.SaveMisreadBarcodeAsync(source, file.FileName, file.ContentType ?? "image/png", cancellationToken);
+                    await misreadBarcodeService.SaveMisreadBarcodeAsync(source, file.FileName, file.ContentType ?? "image/png", cancellationToken);
                     errors.Add($"Could not read a valid invoice barcode from {file.FileName}. Saved to misread barcodes for review.");
                 }
                 else
@@ -410,7 +411,7 @@ public sealed class InvoicesController(
             errors,
             uploaded = results,
             reconciliation = await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken),
-            misreadBarcodes = await invoiceImageRepository.ListMisreadBarcodesAsync(cancellationToken)
+            misreadBarcodes = await misreadBarcodeService.ListMisreadBarcodesAsync(cancellationToken)
         });
     }
 
@@ -418,7 +419,7 @@ public sealed class InvoicesController(
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser}")]
     public async Task<IActionResult> GetMisreadBarcodes(CancellationToken cancellationToken)
     {
-        var items = await invoiceImageRepository.ListMisreadBarcodesAsync(cancellationToken);
+        var items = await misreadBarcodeService.ListMisreadBarcodesAsync(cancellationToken);
         return Ok(items.Select(item => new
         {
             id = item.Id,
@@ -434,11 +435,11 @@ public sealed class InvoicesController(
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser},{RoleNames.CustomerInvoiceUser}")]
     public async Task<IActionResult> ViewMisreadBarcode(string id, CancellationToken cancellationToken)
     {
-        var record = await invoiceImageRepository.GetMisreadBarcodeAsync(id, cancellationToken);
+        var record = await misreadBarcodeService.GetMisreadBarcodeAsync(id, cancellationToken);
         if (record is null)
             return NotFound("Misread barcode image not found.");
 
-        var stream = await invoiceImageRepository.GetMisreadBarcodeStreamAsync(id, cancellationToken);
+        var stream = await misreadBarcodeService.GetMisreadBarcodeStreamAsync(id, cancellationToken);
         if (stream is null)
             return NotFound("Misread barcode image not found.");
 
@@ -463,7 +464,7 @@ public sealed class InvoicesController(
 
         try
         {
-            var objectName = await invoiceImageRepository.ResolveMisreadBarcodeAsync(request.Id, request.InvoiceNumber, request.StoreNumber, request.PageNumber, cancellationToken);
+            var objectName = await misreadBarcodeService.ResolveMisreadBarcodeAsync(request.Id, request.InvoiceNumber, request.StoreNumber, request.PageNumber, cancellationToken);
             return Ok(new { objectName });
         }
         catch (Exception ex)
@@ -479,7 +480,7 @@ public sealed class InvoicesController(
         if (string.IsNullOrWhiteSpace(id))
             return BadRequest("A misread barcode id is required.");
 
-        await invoiceImageRepository.DeleteMisreadBarcodeAsync(id, cancellationToken);
+        await misreadBarcodeService.DeleteMisreadBarcodeAsync(id, cancellationToken);
         return Ok();
     }
 

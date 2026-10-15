@@ -1,439 +1,47 @@
 using AllenKerberAutoSupply.Models;
-using Google.Cloud.Firestore;
 
 namespace AllenKerberAutoSupply.Data;
 
 public sealed class FirestoreInvoiceRepository(
-    FirestoreDb firestore,
-    IInvoiceUploadReconciliationStore reconciliationStore) : IInvoiceRepository
+    IInvoiceQueryRepository queries,
+    IInvoiceMaintenanceRepository maintenance) : IInvoiceRepository
 {
-    private const int SearchPageSize = 30;
+    public Task<InvoiceSearchPage> FindAsync(string? invoiceNumber, string? customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default) =>
+        queries.FindAsync(invoiceNumber, customerNumber, sortKey, sortDirection, page, cancellationToken);
 
-    public async Task<IReadOnlyList<int>> GetDistinctStoreNumbersAsync(CancellationToken cancellationToken = default)
-    {
-        var snapshot = await firestore.Collection("stores").GetSnapshotAsync(cancellationToken);
-        var storeNumbers = new HashSet<int>();
+    public Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default, int? storeNumber = null) =>
+        queries.GetInvoiceDataByDtmAsync(beginDate, endDate, sortKey, sortDirection, page, cancellationToken, storeNumber);
 
-        foreach (var document in snapshot.Documents)
-        {
-            if (TryGetStoreNumber(document, out var storeNumber))
-            {
-                storeNumbers.Add(storeNumber);
-            }
-        }
+    public Task<InvoiceSearchPage> GetInvoiceDataByDtmAndCustomerAsync(DateTime beginDate, DateTime endDate, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default) =>
+        queries.GetInvoiceDataByDtmAndCustomerAsync(beginDate, endDate, customerNumber, sortKey, sortDirection, page, cancellationToken);
 
-        return storeNumbers.OrderBy(storeNumber => storeNumber).ToArray();
-    }
+    public Task<IReadOnlyList<Invoice>> GetInvoicesForTrendAsync(DateTime beginDate, DateTime endDate, CancellationToken cancellationToken = default) =>
+        queries.GetInvoicesForTrendAsync(beginDate, endDate, cancellationToken);
 
-    private static bool TryGetStoreNumber(DocumentSnapshot document, out int storeNumber)
-    {
-        storeNumber = 0;
+    public Task<IReadOnlyList<Invoice>> GetInvoicesForTrendCustomersAsync(IReadOnlyCollection<int> customerNumbers, CancellationToken cancellationToken = default) =>
+        queries.GetInvoicesForTrendCustomersAsync(customerNumbers, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(document.Id))
-        {
-            var idParts = document.Id.Split('_', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            if (idParts.Length > 0 && int.TryParse(idParts[0], out var parsedStoreNumber))
-            {
-                storeNumber = parsedStoreNumber;
-                return storeNumber > 0;
-            }
-        }
+    public Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default) =>
+        queries.GetInvoiceDataByInvoiceNumberAsync(invoiceNumber, sortKey, sortDirection, page, cancellationToken);
 
-        try
-        {
-            var invoice = document.ConvertTo<Invoice>();
-            if (invoice.StoreNumber > 0)
-            {
-                storeNumber = invoice.StoreNumber;
-                return true;
-            }
-        }
-        catch
-        {
-            // fall through to no store number found
-        }
+    public Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAndCustomerAsync(string invoiceNumber, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default) =>
+        queries.GetInvoiceDataByInvoiceNumberAndCustomerAsync(invoiceNumber, customerNumber, sortKey, sortDirection, page, cancellationToken);
 
-        return false;
-    }
+    public Task<IReadOnlyList<StatementInvoiceItem>> GetStatementInvoicesAsync(int customerNumber, DateTime fromDate, DateTime toDate, string commaSeparatedInvoiceNumbers, CancellationToken cancellationToken = default) =>
+        queries.GetStatementInvoicesAsync(customerNumber, fromDate, toDate, commaSeparatedInvoiceNumbers, cancellationToken);
 
-    public async Task<InvoiceUploadReconciliation> GetUploadReconciliationAsync(int storeNumber, CancellationToken cancellationToken = default)
-    {
-        if (storeNumber <= 0)
-        {
-            return new InvoiceUploadReconciliation();
-        }
+    public Task<IReadOnlyList<int>> GetDistinctStoreNumbersAsync(CancellationToken cancellationToken = default) =>
+        maintenance.GetDistinctStoreNumbersAsync(cancellationToken);
 
-        return await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
-    }
+    public Task<InvoiceUploadReconciliation> GetUploadReconciliationAsync(int storeNumber, CancellationToken cancellationToken = default) =>
+        maintenance.GetUploadReconciliationAsync(storeNumber, cancellationToken);
 
-    public async Task DeleteInvoiceAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)
-    {
-        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
-            throw new ArgumentException("A store number and invoice number are required.");
+    public Task DeleteInvoiceAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default) =>
+        maintenance.DeleteInvoiceAsync(storeNumber, invoiceNumber, cancellationToken);
 
-        var normalized = GetNormalizedInvoiceNumber(invoiceNumber);
-        var snapshot = await firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
-            .GetSnapshotAsync(cancellationToken);
-        var matches = snapshot.Documents
-            .Where(document => string.Equals(
-                GetNormalizedInvoiceNumber(document.ConvertTo<Invoice>().InvoiceNumber),
-                normalized,
-                StringComparison.OrdinalIgnoreCase))
-            .ToList();
+    public Task<bool> UpsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default) =>
+        maintenance.UpsertInvoiceDataAsync(customerNumber, invoiceNumber, invoiceDate, invoiceAmount, transactionType, employeeId, storeNumber, paymentMethod, poNumber, cancellationToken);
 
-        foreach (var document in matches)
-            await document.Reference.DeleteAsync(cancellationToken: cancellationToken);
-
-        await reconciliationStore.ReconcileStoreAsync(storeNumber, cancellationToken);
-    }
-
-    private async Task<List<InvoiceUploadMissingImage>> GetMissingInvoiceImageDetailsAsync(
-        int storeNumber,
-        IReadOnlyCollection<string> missingInvoiceKeys,
-        CancellationToken cancellationToken)
-    {
-        if (missingInvoiceKeys.Count == 0)
-        {
-            return [];
-        }
-
-        var invoiceSnapshot = await firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber)
-            .GetSnapshotAsync(cancellationToken);
-
-        return invoiceSnapshot.Documents
-            .Select(document => document.ConvertTo<Invoice>())
-            .Where(invoice => missingInvoiceKeys.Contains(
-                GetNormalizedInvoiceNumber(invoice.InvoiceNumber),
-                StringComparer.OrdinalIgnoreCase))
-            .Select(ToMissingInvoiceImage)
-            .OrderBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static InvoiceUploadMissingImage ToMissingInvoiceImage(Invoice invoice)
-    {
-        return new InvoiceUploadMissingImage
-        {
-            InvoiceNumber = invoice.InvoiceNumber,
-            InvoiceDate = invoice.InvoiceDate?.ToDateTime(),
-            CustomerName = invoice.CustomerName,
-            InvoiceAmount = invoice.InvoiceAmount
-        };
-    }
-
-    private static string GetNormalizedInvoiceNumber(string? invoiceNumber)
-    {
-        var value = (invoiceNumber ?? string.Empty).Trim();
-        if (value.Length == 0 || !value.All(char.IsDigit))
-        {
-            return value;
-        }
-
-        var withoutLeadingZeros = value.TrimStart('0');
-        return withoutLeadingZeros.Length == 0 ? "0" : withoutLeadingZeros;
-    }
-
-    private static void RecomputeUploadState(StoreUploadState state)
-    {
-        var invoiceKeys = state.InvoiceKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var imageKeys = state.ImageKeys.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        state.MissingInvoiceImages = invoiceKeys.Except(imageKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-        state.MissingInvoices = imageKeys.Except(invoiceKeys).OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList();
-        state.UpdatedAt = Timestamp.GetCurrentTimestamp();
-    }
-
-    public async Task<InvoiceSearchPage> FindAsync(string? invoiceNumber, string? customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken)
-    {
-        Query query = firestore.Collection("invoices");
-        if (!string.IsNullOrWhiteSpace(invoiceNumber))
-        {
-            string normalized = invoiceNumber.Trim();
-            query = query.WhereEqualTo(nameof(Invoice.InvoiceNumber), normalized);
-        }
-        if (!string.IsNullOrWhiteSpace(customerNumber) && int.TryParse(customerNumber.Trim(), out int custNo))
-        {
-            query = query.WhereEqualTo(nameof(Invoice.CustomerNumber), custNo);
-        }
-        return await GetChargeInvoiceSearchPageAsync(query, sortKey, sortDirection, page, cancellationToken);
-    }
-
-    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAsync(DateTime beginDate, DateTime endDate, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default, int? storeNumber = null)
-    {
-        var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
-        var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
-
-        Query query = firestore.Collection("invoices")
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
-        if (storeNumber.HasValue)
-        {
-            query = query.WhereEqualTo(nameof(Invoice.StoreNumber), storeNumber.Value);
-        }
-        return await GetChargeInvoiceSearchPageAsync(query, sortKey, sortDirection, page, cancellationToken);
-    }
-
-    public async Task<InvoiceSearchPage> GetInvoiceDataByDtmAndCustomerAsync(DateTime beginDate, DateTime endDate, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
-    {
-        var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
-        var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
-
-        Query query = firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
-        return await GetChargeInvoiceSearchPageAsync(query, sortKey, sortDirection, page, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Invoice>> GetInvoicesForTrendAsync(DateTime beginDate, DateTime endDate, CancellationToken cancellationToken = default)
-    {
-        var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(beginDate, DateTimeKind.Utc));
-        var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(endDate, DateTimeKind.Utc));
-        var snapshot = await firestore.Collection("invoices")
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp)
-            .GetSnapshotAsync(cancellationToken);
-        return snapshot.Documents.Select(document => document.ConvertTo<Invoice>()).ToArray();
-    }
-
-    public async Task<IReadOnlyList<Invoice>> GetInvoicesForTrendCustomersAsync(
-        IReadOnlyCollection<int> customerNumbers,
-        CancellationToken cancellationToken = default)
-    {
-        if (customerNumbers.Count == 0)
-            return [];
-
-        var invoices = new List<Invoice>();
-        foreach (var customerChunk in customerNumbers.Where(number => number > 0).Distinct().Chunk(30))
-        {
-            var snapshot = await firestore.Collection("invoices")
-                .WhereIn(nameof(Invoice.CustomerNumber), customerChunk.Cast<object>())
-                .GetSnapshotAsync(cancellationToken);
-            invoices.AddRange(snapshot.Documents.Select(document => document.ConvertTo<Invoice>()));
-        }
-
-        return invoices;
-    }
-
-    public async Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAsync(string invoiceNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
-    {
-        string raw = (invoiceNumber ?? string.Empty).Trim();
-        if (raw.Length < 3 || !raw.All(char.IsDigit))
-        {
-            return new InvoiceSearchPage();
-        }
-
-        Query query = ApplyInvoiceOrdering(firestore.Collection("invoices"), sortKey, sortDirection);
-
-        var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        var invoices = snapshot.Documents
-            .Select(d => d.ConvertTo<Invoice>())
-            .Where(InvoiceRules.IsChargeInvoice)
-            .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        return ToSearchPage(invoices.Skip(page * SearchPageSize).Take(SearchPageSize), invoices.Count);
-    }
-
-    public async Task<InvoiceSearchPage> GetInvoiceDataByInvoiceNumberAndCustomerAsync(string invoiceNumber, int customerNumber, string? sortKey, string? sortDirection, int page, CancellationToken cancellationToken = default)
-    {
-        string raw = (invoiceNumber ?? string.Empty).Trim();
-        if (raw.Length < 3 || !raw.All(char.IsDigit))
-        {
-            return new InvoiceSearchPage();
-        }
-
-        Query query = firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber);
-        query = ApplyInvoiceOrdering(query, sortKey, sortDirection);
-
-        var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        var invoices = snapshot.Documents
-            .Select(d => d.ConvertTo<Invoice>())
-            .Where(InvoiceRules.IsChargeInvoice)
-            .Where(invoice => invoice.InvoiceNumber.Contains(raw, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        return ToSearchPage(invoices.Skip(page * SearchPageSize).Take(SearchPageSize), invoices.Count);
-    }
-
-    private static async Task<InvoiceSearchPage> GetChargeInvoiceSearchPageAsync(
-        Query query,
-        string? sortKey,
-        string? sortDirection,
-        int page,
-        CancellationToken cancellationToken)
-    {
-        var snapshot = await query.GetSnapshotAsync(cancellationToken);
-        var invoices = snapshot.Documents
-            .Select(document => document.ConvertTo<Invoice>())
-            .Where(InvoiceRules.IsChargeInvoice)
-            .ToList();
-
-        var ordered = ApplyInvoiceOrdering(invoices, sortKey, sortDirection);
-        return ToSearchPage(ordered.Skip(Math.Max(0, page) * SearchPageSize).Take(SearchPageSize), invoices.Count);
-    }
-
-    private static InvoiceSearchPage ToSearchPage(IEnumerable<Invoice> invoices, int totalCount)
-    {
-        var items = invoices.ToArray();
-        return new InvoiceSearchPage
-        {
-            Items = items,
-            HasMore = items.Length == SearchPageSize,
-            TotalCount = totalCount
-        };
-    }
-
-    private static Query ApplyInvoiceOrdering(Query query, string? sortKey, string? sortDirection)
-    {
-        string field = sortKey?.Trim().ToLowerInvariant() switch
-        {
-            "customername" => nameof(Invoice.CustomerName),
-            "invoiceamount" => nameof(Invoice.InvoiceAmount),
-            "storenumber" => nameof(Invoice.StoreNumber),
-            _ => nameof(Invoice.InvoiceDate)
-        };
-
-        return string.Equals(sortDirection?.Trim(), "asc", StringComparison.OrdinalIgnoreCase)
-            ? query.OrderBy(field)
-            : query.OrderByDescending(field);
-    }
-
-    private static IEnumerable<Invoice> ApplyInvoiceOrdering(
-        IEnumerable<Invoice> invoices,
-        string? sortKey,
-        string? sortDirection)
-    {
-        var ascending = string.Equals(sortDirection?.Trim(), "asc", StringComparison.OrdinalIgnoreCase);
-        var ordered = sortKey?.Trim().ToLowerInvariant() switch
-        {
-            "customername" => ascending
-                ? invoices.OrderBy(invoice => invoice.CustomerName, StringComparer.OrdinalIgnoreCase)
-                : invoices.OrderByDescending(invoice => invoice.CustomerName, StringComparer.OrdinalIgnoreCase),
-            "invoiceamount" => ascending
-                ? invoices.OrderBy(invoice => invoice.InvoiceAmount)
-                : invoices.OrderByDescending(invoice => invoice.InvoiceAmount),
-            "storenumber" => ascending
-                ? invoices.OrderBy(invoice => invoice.StoreNumber)
-                : invoices.OrderByDescending(invoice => invoice.StoreNumber),
-            _ => ascending
-                ? invoices.OrderBy(invoice => invoice.InvoiceDate)
-                : invoices.OrderByDescending(invoice => invoice.InvoiceDate)
-        };
-
-        return ordered.ThenBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase);
-    }
-
-    public async Task<IReadOnlyList<StatementInvoiceItem>> GetStatementInvoicesAsync(int customerNumber, DateTime fromDate, DateTime toDate, string commaSeparatedInvoiceNumbers, CancellationToken cancellationToken = default)
-    {
-        var targetInvoiceNumbers = (commaSeparatedInvoiceNumbers ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => x.Trim())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var startTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(fromDate, DateTimeKind.Utc));
-        var endTimestamp = Timestamp.FromDateTime(DateTime.SpecifyKind(toDate, DateTimeKind.Utc));
-
-        var customerDoc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
-        var customer = customerDoc.Exists ? customerDoc.ConvertTo<FirestoreCustomer>() : null;
-
-        Query query = firestore.Collection("invoices")
-            .WhereEqualTo(nameof(Invoice.CustomerNumber), customerNumber)
-            .WhereGreaterThanOrEqualTo(nameof(Invoice.InvoiceDate), startTimestamp)
-            .WhereLessThanOrEqualTo(nameof(Invoice.InvoiceDate), endTimestamp);
-
-        var snapshots = new List<QuerySnapshot>();
-        if (targetInvoiceNumbers.Count == 0)
-        {
-            snapshots.Add(await query.GetSnapshotAsync(cancellationToken));
-        }
-        else
-        {
-            foreach (var invoiceNumberChunk in targetInvoiceNumbers.Chunk(30))
-            {
-                var chunkQuery = query.WhereIn(
-                    nameof(Invoice.InvoiceNumber),
-                    invoiceNumberChunk.Cast<object>());
-                snapshots.Add(await chunkQuery.GetSnapshotAsync(cancellationToken));
-            }
-        }
-
-        var results = new List<StatementInvoiceItem>();
-
-        foreach (var doc in snapshots.SelectMany(snapshot => snapshot.Documents))
-        {
-            var invoice = doc.ConvertTo<Invoice>();
-            results.Add(new StatementInvoiceItem
-            {
-                InvoiceNumber = invoice.InvoiceNumber,
-                InvoiceDate = invoice.InvoiceDate?.ToDateTime(),
-                InvoiceAmount = invoice.InvoiceAmount,
-                VendorId = $"Vendor Number: {customer?.VendorId ?? string.Empty}",
-                StoreNumber = $"800005{invoice.StoreNumber.ToString().PadLeft(3, '0')}",
-                StatementOrInvoice = customer?.StatementOrInvoice ?? "I",
-                CustomerName = customer?.CustomerName ?? invoice.CustomerName
-            });
-        }
-
-        return results.OrderBy(r => r.InvoiceNumber).ToList();
-    }
-
-    public async Task<bool> UpsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default)
-    {
-        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
-        string docId = $"{storeNumber}_{normalized}";
-        var docRef = firestore.Collection("invoices").Document(docId);
-        var imageDocument = await firestore.Collection("invoice_images")
-            .Document(docId)
-            .GetSnapshotAsync(cancellationToken);
-        var existingImage = imageDocument.Exists ? imageDocument.ConvertTo<InvoiceImageLookup>() : null;
-        var imageObjectName = existingImage is not null && !string.IsNullOrWhiteSpace(existingImage.ObjectName)
-            ? existingImage.ObjectName
-            : string.Empty;
-
-        var customerDoc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
-        string customerName = customerDoc.Exists && customerDoc.TryGetValue("CustomerName", out string name) ? name : string.Empty;
-
-        var invoice = new Invoice
-        {
-            InvoiceNumber = normalized,
-            StoreNumber = storeNumber,
-            CustomerNumber = customerNumber,
-            CustomerName = customerName,
-            InvoiceDate = Timestamp.FromDateTime(DateTime.SpecifyKind(invoiceDate, DateTimeKind.Utc)),
-            InvoiceAmount = (double)invoiceAmount,
-            TransactionType = (transactionType ?? string.Empty).Trim(),
-            PaymentMethod = (paymentMethod ?? string.Empty).Trim(),
-            EmployeeNumber = employeeId,
-            PoNumber = (poNumber ?? string.Empty).Trim(),
-            HasImages = imageObjectName.Length > 0,
-            ImageObjectName = imageObjectName
-        };
-
-        await docRef.SetAsync(invoice, SetOptions.Overwrite, cancellationToken);
-        if (imageDocument.Exists)
-        {
-            await imageDocument.Reference.UpdateAsync(
-                nameof(InvoiceImageLookup.HasInvoice), true,
-                cancellationToken: cancellationToken);
-        }
-
-        return true;
-    }
-
-    public async Task<bool> InsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default)
-    {
-        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
-        string docId = $"{storeNumber}_{normalized}";
-        var docRef = firestore.Collection("invoices").Document(docId);
-
-        var existing = await docRef.GetSnapshotAsync(cancellationToken);
-        if (existing.Exists)
-            return false;
-
-        return await UpsertInvoiceDataAsync(customerNumber, normalized, invoiceDate, invoiceAmount, transactionType, employeeId, storeNumber, paymentMethod, poNumber, cancellationToken);
-    }
+    public Task<bool> InsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default) =>
+        maintenance.InsertInvoiceDataAsync(customerNumber, invoiceNumber, invoiceDate, invoiceAmount, transactionType, employeeId, storeNumber, paymentMethod, poNumber, cancellationToken);
 }

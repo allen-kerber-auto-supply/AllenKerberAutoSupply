@@ -37,9 +37,9 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
             .Where(invoice => !string.IsNullOrWhiteSpace(invoice.InvoiceNumber))
             .ToList();
         var missingInvoices = imageSnapshot.Documents
-            .Select(document => document.ConvertTo<InvoiceImageLookup>().InvoiceNumber)
+            .Select(GetInvoiceNumber)
             .Where(invoiceNumber => !string.IsNullOrWhiteSpace(invoiceNumber))
-            .Select(Normalize)
+            .Select(InvoiceNumberNormalizer.NormalizeForComparison)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(invoiceNumber => invoiceNumber, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -57,7 +57,7 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
                 .OrderBy(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             MissingInvoiceImageKeys = missingInvoiceImages
-                .Select(invoice => Normalize(invoice.InvoiceNumber))
+                .Select(invoice => InvoiceNumberNormalizer.NormalizeForComparison(invoice.InvoiceNumber))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(invoiceNumber => invoiceNumber, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
@@ -65,15 +65,12 @@ public sealed class FirestoreInvoiceUploadReconciliationStore(FirestoreDb firest
         };
     }
 
-    private static string Normalize(string? invoiceNumber)
+    private static string? GetInvoiceNumber(DocumentSnapshot document)
     {
-        var value = (invoiceNumber ?? string.Empty).Trim();
-        if (value.Length == 0 || !value.All(char.IsDigit))
-        {
-            return value;
-        }
-
-        var withoutLeadingZeros = value.TrimStart('0');
-        return withoutLeadingZeros.Length == 0 ? "0" : withoutLeadingZeros;
+        var values = document.ToDictionary();
+        return values.TryGetValue(nameof(InvoiceImageLookup.InvoiceNumber), out var value)
+            ? value?.ToString()
+            : null;
     }
+
 }
