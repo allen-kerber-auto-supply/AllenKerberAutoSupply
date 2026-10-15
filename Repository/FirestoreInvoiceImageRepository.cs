@@ -250,6 +250,7 @@ public sealed class FirestoreInvoiceImageRepository(
 
         string imageDocId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoice_images").Document(imageDocId);
+        var matchingImageReferences = await GetMatchingImageReferencesAsync(normalized, storeNumber, docRef, cancellationToken);
         var invoiceCollection = firestore.Collection("invoices");
         var directInvoiceDocument = invoiceCollection.Document(imageDocId);
         DocumentReference? invoiceDocumentReference = directInvoiceDocument;
@@ -274,20 +275,12 @@ public sealed class FirestoreInvoiceImageRepository(
 
         await firestore.RunTransactionAsync(async transaction =>
         {
-            var snapshot = await transaction.GetSnapshotAsync(docRef);
+            var matchingImages = await ReadMatchingImageLookupsAsync(transaction, matchingImageReferences, docRef);
             var invoiceSnapshot = invoiceDocumentReference is null
                 ? null
                 : await transaction.GetSnapshotAsync(invoiceDocumentReference);
             var hasInvoice = invoiceSnapshot?.Exists == true;
-            var lookup = snapshot.Exists ? snapshot.ConvertTo<InvoiceImageLookup>() : new InvoiceImageLookup
-            {
-                StoreNumber = storeNumber,
-                InvoiceNumber = normalized,
-                HasInvoice = hasInvoice,
-                BucketName = bucketName,
-                ContentType = resolvedContentType,
-                Pages = []
-            };
+            var lookup = MergeInvoiceImageLookups(matchingImages, storeNumber, normalized, bucketName, resolvedContentType);
 
             int targetPage = pageIndex ?? (lookup.Pages.Count + 1);
             finalObjectName = $"invoices/{storeNumber}/{normalized}/page_{targetPage}.png";
@@ -323,13 +316,14 @@ public sealed class FirestoreInvoiceImageRepository(
 
             lookup.Pages = lookup.Pages.OrderBy(p => p.PageIndex).ToList();
             lookup.TotalPages = lookup.Pages.Count;
-            lookup.HasInvoice = hasInvoice;
+            lookup.HasInvoice = lookup.HasInvoice || hasInvoice;
             lookup.BucketName = bucketName;
             lookup.ContentType = resolvedContentType;
             lookup.ObjectName = finalObjectName;
             lookup.UploadedAt = Timestamp.GetCurrentTimestamp();
 
             transaction.Set(docRef, lookup, SetOptions.Overwrite);
+            DeleteDuplicateImageDocuments(transaction, matchingImages, docRef);
 
             if (invoiceDocumentReference is not null && invoiceSnapshot?.Exists == true)
             {
@@ -342,6 +336,136 @@ public sealed class FirestoreInvoiceImageRepository(
         }, cancellationToken: cancellationToken);
 
         return finalObjectName;
+    }
+
+    public async Task<InvoiceImageLookup> UpsertInvoiceLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
+    {
+        if (storeNumber <= 0 || string.IsNullOrWhiteSpace(invoiceNumber))
+            throw new ArgumentException("A store number and invoice number are required.");
+
+        string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
+        string documentId = $"{storeNumber}_{normalized}";
+        var documentReference = firestore.Collection("invoice_images").Document(documentId);
+        var matchingReferences = await GetMatchingImageReferencesAsync(normalized, storeNumber, documentReference, cancellationToken);
+        InvoiceImageLookup lookup = new();
+
+        await firestore.RunTransactionAsync(async transaction =>
+        {
+            var matchingImages = await ReadMatchingImageLookupsAsync(transaction, matchingReferences, documentReference);
+            lookup = MergeInvoiceImageLookups(matchingImages, storeNumber, normalized, gcpOptions.Value.ImageBucket, "image/png");
+            lookup.HasInvoice = true;
+            transaction.Set(documentReference, lookup, SetOptions.Overwrite);
+            DeleteDuplicateImageDocuments(transaction, matchingImages, documentReference);
+        }, cancellationToken: cancellationToken);
+
+        return lookup;
+    }
+
+    private async Task<IReadOnlyList<DocumentReference>> GetMatchingImageReferencesAsync(
+        string invoiceNumber,
+        int storeNumber,
+        DocumentReference canonicalReference,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await firestore.Collection("invoice_images")
+            .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
+            .GetSnapshotAsync(cancellationToken);
+        var references = snapshot.Documents
+            .Where(document => string.Equals(
+                InvoiceNumberNormalizer.NormalizeForComparison(
+                    document.ConvertTo<InvoiceImageLookup>().InvoiceNumber),
+                InvoiceNumberNormalizer.NormalizeForComparison(invoiceNumber),
+                StringComparison.OrdinalIgnoreCase))
+            .Select(document => document.Reference)
+            .ToList();
+
+        if (references.All(reference => reference.Id != canonicalReference.Id))
+            references.Add(canonicalReference);
+
+        return references;
+    }
+
+    private static async Task<IReadOnlyList<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)>> ReadMatchingImageLookupsAsync(
+        Transaction transaction,
+        IReadOnlyList<DocumentReference> references,
+        DocumentReference canonicalReference)
+    {
+        var results = new List<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)>();
+        foreach (var reference in references)
+        {
+            var snapshot = await transaction.GetSnapshotAsync(reference);
+            if (snapshot.Exists)
+                results.Add((snapshot, snapshot.ConvertTo<InvoiceImageLookup>()));
+        }
+
+        return results
+            .OrderByDescending(item => item.Snapshot.Id == canonicalReference.Id)
+            .ToList();
+    }
+
+    private static InvoiceImageLookup MergeInvoiceImageLookups(
+        IReadOnlyList<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)> matchingImages,
+        int storeNumber,
+        string invoiceNumber,
+        string bucketName,
+        string contentType)
+    {
+        var lookup = matchingImages.Count > 0
+            ? matchingImages[0].Lookup
+            : new InvoiceImageLookup
+            {
+                StoreNumber = storeNumber,
+                InvoiceNumber = invoiceNumber,
+                BucketName = bucketName,
+                ContentType = contentType,
+                Pages = []
+            };
+
+        lookup.StoreNumber = storeNumber;
+        lookup.InvoiceNumber = invoiceNumber;
+        lookup.Pages ??= [];
+
+        foreach (var item in matchingImages)
+        {
+            foreach (var page in item.Lookup.Pages ?? [])
+            {
+                if (lookup.Pages.All(existing => existing.PageIndex != page.PageIndex))
+                    lookup.Pages.Add(page);
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Lookup.ObjectName) &&
+                lookup.Pages.All(page => page.ObjectName != item.Lookup.ObjectName))
+            {
+                lookup.Pages.Add(new InvoiceImagePage
+                {
+                    PageIndex = lookup.Pages.Count == 0 ? 1 : lookup.Pages.Max(page => page.PageIndex) + 1,
+                    ObjectName = item.Lookup.ObjectName,
+                    BucketName = item.Lookup.BucketName,
+                    ContentType = item.Lookup.ContentType,
+                    UploadedAt = item.Lookup.UploadedAt
+                });
+            }
+
+            lookup.HasInvoice |= item.Lookup.HasInvoice;
+        }
+
+        lookup.Pages = lookup.Pages.OrderBy(page => page.PageIndex).ToList();
+        if (lookup.Pages.Count > 0)
+            lookup.TotalPages = lookup.Pages.Count;
+
+        return lookup;
+    }
+
+    private static void DeleteDuplicateImageDocuments(
+        Transaction transaction,
+        IReadOnlyList<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)> matchingImages,
+        DocumentReference canonicalReference)
+    {
+        foreach (var item in matchingImages)
+        {
+            if (item.Snapshot.Id != canonicalReference.Id)
+                transaction.Delete(item.Snapshot.Reference);
+        }
     }
 
     public async Task DeleteInvoiceImagesAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default)

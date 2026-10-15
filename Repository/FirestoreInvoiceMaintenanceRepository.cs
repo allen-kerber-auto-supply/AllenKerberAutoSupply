@@ -5,6 +5,7 @@ namespace AllenKerberAutoSupply.Data;
 
 public sealed class FirestoreInvoiceMaintenanceRepository(
     FirestoreDb firestore,
+    IInvoiceImageRepository invoiceImageRepository,
     IInvoiceUploadReconciliationStore reconciliationStore) : IInvoiceMaintenanceRepository
 {
     public async Task<IReadOnlyList<int>> GetDistinctStoreNumbersAsync(CancellationToken cancellationToken = default)
@@ -91,13 +92,6 @@ public sealed class FirestoreInvoiceMaintenanceRepository(
         string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
         string docId = $"{storeNumber}_{normalized}";
         var docRef = firestore.Collection("invoices").Document(docId);
-        var imageDocument = await firestore.Collection("invoice_images")
-            .Document(docId)
-            .GetSnapshotAsync(cancellationToken);
-        var existingImage = imageDocument.Exists ? imageDocument.ConvertTo<InvoiceImageLookup>() : null;
-        var imageObjectName = existingImage is not null && !string.IsNullOrWhiteSpace(existingImage.ObjectName)
-            ? existingImage.ObjectName
-            : string.Empty;
 
         var customerDoc = await firestore.Collection("customers").Document(customerNumber.ToString()).GetSnapshotAsync(cancellationToken);
         string customerName = customerDoc.Exists && customerDoc.TryGetValue("CustomerName", out string name) ? name : string.Empty;
@@ -114,17 +108,18 @@ public sealed class FirestoreInvoiceMaintenanceRepository(
             PaymentMethod = (paymentMethod ?? string.Empty).Trim(),
             EmployeeNumber = employeeId,
             PoNumber = (poNumber ?? string.Empty).Trim(),
-            HasImages = imageObjectName.Length > 0,
-            ImageObjectName = imageObjectName
         };
 
         await docRef.SetAsync(invoice, SetOptions.Overwrite, cancellationToken);
-        if (imageDocument.Exists)
+        var imageLookup = await invoiceImageRepository.UpsertInvoiceLookupAsync(normalized, storeNumber, cancellationToken);
+        var imageObjectName = !string.IsNullOrWhiteSpace(imageLookup.ObjectName)
+            ? imageLookup.ObjectName
+            : imageLookup.Pages.FirstOrDefault()?.ObjectName ?? string.Empty;
+        await docRef.UpdateAsync(new Dictionary<string, object>
         {
-            await imageDocument.Reference.UpdateAsync(
-                nameof(InvoiceImageLookup.HasInvoice), true,
-                cancellationToken: cancellationToken);
-        }
+            { nameof(Invoice.HasImages), imageLookup.Pages.Count > 0 || imageObjectName.Length > 0 },
+            { nameof(Invoice.ImageObjectName), imageObjectName }
+        }, cancellationToken: cancellationToken);
 
         return true;
     }
