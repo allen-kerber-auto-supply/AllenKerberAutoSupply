@@ -127,6 +127,8 @@ public sealed class InvoicesController(
         if (excelFile is null || excelFile.Length == 0)
             return BadRequest("An Excel file is required.");
 
+        uploadProgressEventBus.Reset("excel");
+        uploadProgressEventBus.Publish("excel", "in_progress", 0, "Reading the selected Excel file...");
         return await ImportInvoiceFileAsync(excelFile, storeNumber, cancellationToken);
     }
 

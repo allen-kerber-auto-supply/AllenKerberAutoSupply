@@ -45,6 +45,9 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   misreadSaveError = '';
   misreadSaveStatus = '';
   private misreadImageRequest: Subscription | null = null;
+  private reconciliationRequest: Subscription | null = null;
+  private excelUpload: Subscription | null = null;
+  private imagesUpload: Subscription | null = null;
   private excelTimer: number | null = null;
   private imagesTimer: number | null = null;
   private uploadStateVersion = 0;
@@ -83,12 +86,14 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   }
 
   loadReconciliation() {
+    this.reconciliationRequest?.unsubscribe();
+    this.reconciliationRequest = null;
     if (this.selectedStore <= 0) {
       this.reconciliation = { missingInvoiceImages: [], missingInvoices: [] };
       this.missingImageDetails = [];
       return;
     }
-    this.http.get<InvoiceUploadReconciliation>(`/api/invoices/upload-reconciliation?storeNumber=${this.selectedStore}`).subscribe({
+    this.reconciliationRequest = this.http.get<InvoiceUploadReconciliation>(`/api/invoices/upload-reconciliation?storeNumber=${this.selectedStore}`).subscribe({
       next: result => {
         this.reconciliation = result || { missingInvoiceImages: [], missingInvoices: [] };
         this.missingInvoiceDrafts = Object.fromEntries(
@@ -150,6 +155,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    input.value = '';
     this.clearUploadState();
     if (!this.requireStore('csv')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
@@ -158,7 +164,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     formData.append('storeNumber', String(this.selectedStore));
     this.csvStatus = 'Uploading Excel file...'; this.csvProgress = 0;
     this.stopTimer('excel'); this.startTimer('excel');
-    this.http.post<any>('/api/invoices/upload-excel', formData, { reportProgress: true, observe: 'events' }).subscribe({
+    this.excelUpload = this.http.post<any>('/api/invoices/upload-excel', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
         if (stateVersion !== this.uploadStateVersion) return;
         if (event.type !== HttpEventType.Response || !event.body) return;
@@ -171,8 +177,9 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
       error: error => {
         if (stateVersion !== this.uploadStateVersion) return;
         this.stopTimer('excel'); this.csvStatus = error.error?.message || 'Unable to import the selected Excel file.'; this.csvProgress = 0;
+        this.loadReconciliation();
       },
-      complete: () => input.value = ''
+      complete: () => this.excelUpload = null
     });
   }
 
@@ -180,6 +187,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
     if (!files.length) return;
+    input.value = '';
     this.clearUploadState();
     if (!this.requireStore('images')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
@@ -188,7 +196,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     formData.append('storeNumber', String(this.selectedStore));
     this.imagesStatus = 'Uploading images...'; this.imagesProgress = 0;
     this.stopTimer('images'); this.startTimer('images');
-    this.http.post<any>('/api/invoices/upload-images', formData, { reportProgress: true, observe: 'events' }).subscribe({
+    this.imagesUpload = this.http.post<any>('/api/invoices/upload-images', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
         if (stateVersion !== this.uploadStateVersion) return;
         if (event.type !== HttpEventType.Response || !event.body) return;
@@ -201,8 +209,9 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
       error: error => {
         if (stateVersion !== this.uploadStateVersion) return;
         this.stopTimer('images'); this.imagesStatus = error.error?.message || 'Unable to upload the selected image folder.'; this.imagesProgress = 0;
+        this.loadReconciliation();
       },
-      complete: () => input.value = ''
+      complete: () => this.imagesUpload = null
     });
   }
 
@@ -440,11 +449,20 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
 
   private clearUploadState() {
     this.uploadStateVersion++;
+    this.excelUpload?.unsubscribe();
+    this.excelUpload = null;
+    this.imagesUpload?.unsubscribe();
+    this.imagesUpload = null;
     this.stopTimer('excel');
     this.stopTimer('images');
     this.csvStatus = '';
     this.csvProgress = 0;
     this.imagesStatus = '';
     this.imagesProgress = 0;
+    this.reconciliationRequest?.unsubscribe();
+    this.reconciliationRequest = null;
+    this.reconciliation = { missingInvoiceImages: [], missingInvoices: [] };
+    this.missingImageDetails = [];
+    this.missingInvoiceDrafts = {};
   }
 }
