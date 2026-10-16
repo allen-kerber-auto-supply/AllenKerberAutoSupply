@@ -178,8 +178,6 @@ public sealed class InvoicesController(
         if (storeNumber <= 0)
             return BadRequest("A store number is required.");
 
-        var imported = 0;
-        var processed = 0;
         var errors = new List<string>();
         var rows = new List<Dictionary<string, string>>();
 
@@ -260,7 +258,14 @@ public sealed class InvoicesController(
             }
         }
 
-        var totalRows = rows.Count;
+        var totalInvoiceNumbers = rows
+            .Select(row => GetRowValue(row, "invoice_no", "invoiceNo", "invoice number", "invoicenumber", "invoice no"))
+            .Where(invoiceNumber => !string.IsNullOrWhiteSpace(invoiceNumber))
+            .Select(InvoiceNumberNormalizer.NormalizeForComparison)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var processedInvoiceNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var importedInvoiceNumbers = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         var customerInitializations = new ConcurrentDictionary<int, Lazy<Task<bool>>>();
         foreach (var row in rows)
         {
@@ -278,7 +283,7 @@ public sealed class InvoicesController(
             }
         }
 
-        uploadProgressEventBus.Publish(operation, "in_progress", 0, $"Preparing to import {totalRows} invoice rows...", 0, totalRows);
+        uploadProgressEventBus.Publish(operation, "in_progress", 0, $"Preparing to import {totalInvoiceNumbers} invoice numbers...", 0, totalInvoiceNumbers);
         const int rowsPerBatch = 100;
         for (var offset = 0; offset < rows.Count; offset += rowsPerBatch)
         {
@@ -296,13 +301,13 @@ public sealed class InvoicesController(
                 });
 
             var batchInvoices = preparedRows.OfType<InvoiceImportRecord>().ToArray();
-            var batchImported = 0;
             if (batchInvoices.Length > 0)
             {
                 try
                 {
                     await repository.UpsertInvoiceDataBatchAsync(batchInvoices, storeNumber, cancellationToken);
-                    batchImported = batchInvoices.Length;
+                    foreach (var invoiceNumber in batchInvoices.Select(invoice => InvoiceNumberNormalizer.NormalizeForComparison(invoice.InvoiceNumber)))
+                        importedInvoiceNumbers.TryAdd(invoiceNumber, 0);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -320,7 +325,10 @@ public sealed class InvoicesController(
                             var result = await TryUpsertInvoiceRowAsync(batchInvoices[index], storeNumber, token);
                             batchErrors[index] = result.error;
                             if (result.imported)
-                                Interlocked.Increment(ref batchImported);
+                            {
+                                var invoiceNumber = InvoiceNumberNormalizer.NormalizeForComparison(batchInvoices[index].InvoiceNumber);
+                                importedInvoiceNumbers.TryAdd(invoiceNumber, 0);
+                            }
                         });
 
                     for (var index = 0; index < batchErrors.Length; index++)
@@ -331,26 +339,38 @@ public sealed class InvoicesController(
                 }
             }
 
-            imported += batchImported;
             errors.AddRange(preparationErrors.OfType<string>());
-            processed += rowBatch.Length;
-            var percent = totalRows == 0 ? 99 : Math.Min(99, (int)Math.Round((double)processed / totalRows * 100d));
-            uploadProgressEventBus.Publish(
-                operation,
-                "in_progress",
-                percent,
-                $"Processed {processed} of {totalRows} rows; {imported} invoices imported.",
-                processed,
-                totalRows);
+            var batchInvoiceNumbers = rowBatch
+                .Select(row => GetRowValue(row, "invoice_no", "invoiceNo", "invoice number", "invoicenumber", "invoice no"))
+                .Where(invoiceNumber => !string.IsNullOrWhiteSpace(invoiceNumber))
+                .Select(InvoiceNumberNormalizer.NormalizeForComparison)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var invoiceNumber in batchInvoiceNumbers)
+            {
+                if (!processedInvoiceNumbers.Add(invoiceNumber))
+                    continue;
+
+                var processedInvoices = processedInvoiceNumbers.Count;
+                var percent = totalInvoiceNumbers == 0
+                    ? 99
+                    : Math.Min(99, (int)Math.Round((double)processedInvoices / totalInvoiceNumbers * 100d));
+                uploadProgressEventBus.Publish(
+                    operation,
+                    "in_progress",
+                    percent,
+                    $"{importedInvoiceNumbers.Count} of {totalInvoiceNumbers} invoices uploaded.",
+                    importedInvoiceNumbers.Count,
+                    totalInvoiceNumbers);
+            }
         }
 
         var reconciliation = await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken);
-        uploadProgressEventBus.Publish(operation, "completed", 100, $"Completed: {imported} invoices imported from {processed} rows.", processed, totalRows);
+        uploadProgressEventBus.Publish(operation, "completed", 100, $"Completed: {importedInvoiceNumbers.Count} of {totalInvoiceNumbers} invoices uploaded.", importedInvoiceNumbers.Count, totalInvoiceNumbers);
         return Ok(new
         {
-            imported,
-            processed,
-            totalRows,
+            imported = importedInvoiceNumbers.Count,
+            totalInvoiceNumbers,
             errors,
             reconciliation
         });

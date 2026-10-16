@@ -175,8 +175,8 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         const imported = event.body.imported ?? 0;
         const errors = event.body.errors?.length ? ` ${event.body.errors.join(' ')}` : '';
         this.stopTimer('excel'); this.csvProgress = 100;
-        const totalRows = event.body.totalRows ?? event.body.processed ?? imported;
-        this.csvStatus = `Completed: ${imported} invoice${imported === 1 ? '' : 's'} imported from ${totalRows} rows.${errors}`;
+        const totalInvoices = event.body.totalInvoiceNumbers ?? imported;
+        this.csvStatus = `Completed: ${imported} of ${totalInvoices} invoice${totalInvoices === 1 ? '' : 's'} uploaded.${errors}`;
         this.loadReconciliation(); this.loadMisreadBarcodes();
       },
       error: error => {
