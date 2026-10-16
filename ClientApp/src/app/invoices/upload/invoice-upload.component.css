@@ -1,5 +1,13 @@
 :host { display: block; }
 
+.upload-control-scope {
+	border: 0;
+	margin: 0;
+	min-width: 0;
+	padding: 0;
+	width: 100%;
+}
+
 .upload-file-label.disabled {
 	opacity: 0.45;
 	cursor: not-allowed;

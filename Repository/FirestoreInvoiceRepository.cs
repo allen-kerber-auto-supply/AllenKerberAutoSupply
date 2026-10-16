@@ -42,6 +42,9 @@ public sealed class FirestoreInvoiceRepository(
     public Task<bool> UpsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default) =>
         maintenance.UpsertInvoiceDataAsync(customerNumber, invoiceNumber, invoiceDate, invoiceAmount, transactionType, employeeId, storeNumber, paymentMethod, poNumber, cancellationToken);
 
+    public Task UpsertInvoiceDataBatchAsync(IReadOnlyList<InvoiceImportRecord> invoices, int storeNumber, CancellationToken cancellationToken = default) =>
+        maintenance.UpsertInvoiceDataBatchAsync(invoices, storeNumber, cancellationToken);
+
     public Task<bool> InsertInvoiceDataAsync(int customerNumber, string invoiceNumber, DateTime invoiceDate, decimal invoiceAmount, string transactionType, int employeeId, int storeNumber, string paymentMethod, string poNumber, CancellationToken cancellationToken = default) =>
         maintenance.InsertInvoiceDataAsync(customerNumber, invoiceNumber, invoiceDate, invoiceAmount, transactionType, employeeId, storeNumber, paymentMethod, poNumber, cancellationToken);
 }

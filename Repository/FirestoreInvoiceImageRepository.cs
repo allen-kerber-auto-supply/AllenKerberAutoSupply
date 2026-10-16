@@ -403,7 +403,7 @@ public sealed class FirestoreInvoiceImageRepository(
             .ToList();
     }
 
-    private static InvoiceImageLookup MergeInvoiceImageLookups(
+    internal static InvoiceImageLookup MergeInvoiceImageLookups(
         IReadOnlyList<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)> matchingImages,
         int storeNumber,
         string invoiceNumber,
@@ -456,7 +456,7 @@ public sealed class FirestoreInvoiceImageRepository(
         return lookup;
     }
 
-    private static void DeleteDuplicateImageDocuments(
+    internal static void DeleteDuplicateImageDocuments(
         Transaction transaction,
         IReadOnlyList<(DocumentSnapshot Snapshot, InvoiceImageLookup Lookup)> matchingImages,
         DocumentReference canonicalReference)

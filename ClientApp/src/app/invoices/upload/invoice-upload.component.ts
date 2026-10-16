@@ -24,6 +24,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
   csvProgress = 0;
   imagesStatus = '';
   imagesProgress = 0;
+  isUploading = false;
   reconciliation: InvoiceUploadReconciliation = { missingInvoiceImages: [], missingInvoices: [] };
   missingImageDetails: InvoiceUploadMissingImage[] = [];
   missingImageDateSortDirection: 'asc' | 'desc' = 'desc';
@@ -159,11 +160,14 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.clearUploadState();
     if (!this.requireStore('csv')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
+    const uploadId = this.createUploadId();
     const formData = new FormData();
     formData.append('excelFile', file, file.name);
     formData.append('storeNumber', String(this.selectedStore));
+    formData.append('uploadId', uploadId);
+    this.isUploading = true;
     this.csvStatus = 'Uploading Excel file...'; this.csvProgress = 0;
-    this.stopTimer('excel'); this.startTimer('excel');
+    this.stopTimer('excel'); this.startTimer('excel', uploadId);
     this.excelUpload = this.http.post<any>('/api/invoices/upload-excel', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
         if (stateVersion !== this.uploadStateVersion) return;
@@ -171,15 +175,17 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         const imported = event.body.imported ?? 0;
         const errors = event.body.errors?.length ? ` ${event.body.errors.join(' ')}` : '';
         this.stopTimer('excel'); this.csvProgress = 100;
-        this.csvStatus = `Excel imported successfully (${imported} invoice${imported === 1 ? '' : 's'}).${errors}`;
+        const totalRows = event.body.totalRows ?? event.body.processed ?? imported;
+        this.csvStatus = `Completed: ${imported} invoice${imported === 1 ? '' : 's'} imported from ${totalRows} rows.${errors}`;
         this.loadReconciliation(); this.loadMisreadBarcodes();
       },
       error: error => {
         if (stateVersion !== this.uploadStateVersion) return;
         this.stopTimer('excel'); this.csvStatus = error.error?.message || 'Unable to import the selected Excel file.'; this.csvProgress = 0;
         this.loadReconciliation();
+        this.isUploading = false;
       },
-      complete: () => this.excelUpload = null
+      complete: () => { this.excelUpload = null; this.isUploading = false; }
     });
   }
 
@@ -191,11 +197,14 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.clearUploadState();
     if (!this.requireStore('images')) { input.value = ''; return; }
     const stateVersion = this.uploadStateVersion;
+    const uploadId = this.createUploadId();
     const formData = new FormData();
     for (const file of files) formData.append('files', file, file.name);
     formData.append('storeNumber', String(this.selectedStore));
+    formData.append('uploadId', uploadId);
+    this.isUploading = true;
     this.imagesStatus = 'Uploading images...'; this.imagesProgress = 0;
-    this.stopTimer('images'); this.startTimer('images');
+    this.stopTimer('images'); this.startTimer('images', uploadId);
     this.imagesUpload = this.http.post<any>('/api/invoices/upload-images', formData, { reportProgress: true, observe: 'events' }).subscribe({
       next: event => {
         if (stateVersion !== this.uploadStateVersion) return;
@@ -203,15 +212,16 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
         const processed = event.body.processed ?? 0;
         const errors = event.body.errors?.length ? ` ${event.body.errors.join(' ')}` : '';
         this.stopTimer('images'); this.imagesProgress = 100;
-        this.imagesStatus = `Processed ${processed} image${processed === 1 ? '' : 's'}.${errors}`;
+        this.imagesStatus = `Completed: ${processed} image${processed === 1 ? '' : 's'} uploaded.${errors}`;
         this.loadReconciliation(); this.loadMisreadBarcodes();
       },
       error: error => {
         if (stateVersion !== this.uploadStateVersion) return;
         this.stopTimer('images'); this.imagesStatus = error.error?.message || 'Unable to upload the selected image folder.'; this.imagesProgress = 0;
         this.loadReconciliation();
+        this.isUploading = false;
       },
-      complete: () => this.imagesUpload = null
+      complete: () => { this.imagesUpload = null; this.isUploading = false; }
     });
   }
 
@@ -424,15 +434,16 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     return false;
   }
 
-  private startTimer(type: 'excel' | 'images') {
+  private startTimer(type: 'excel' | 'images', uploadId: string) {
     const stateVersion = this.uploadStateVersion;
-    const poll = () => this.http.get<UploadProgressState>(`/api/invoices/progress?operation=${type}`).subscribe({
+    const operation = `${type}:${uploadId}`;
+    const poll = () => this.http.get<UploadProgressState>(`/api/invoices/progress?operation=${encodeURIComponent(operation)}`).subscribe({
       next: state => {
-        if (stateVersion !== this.uploadStateVersion) return;
+        if (stateVersion !== this.uploadStateVersion || state?.status === 'idle') return;
         const percent = Math.max(0, Math.min(100, Number(state?.percent) || 0));
         if (type === 'excel') { this.csvProgress = percent; this.csvStatus = state.message || 'Uploading Excel file...'; }
         else { this.imagesProgress = percent; this.imagesStatus = state.message || 'Uploading images...'; }
-        if (state?.status === 'completed' || percent >= 100) this.stopTimer(type);
+        if (state?.status === 'completed') this.stopTimer(type);
       },
       error: () => {}
     });
@@ -449,6 +460,7 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
 
   private clearUploadState() {
     this.uploadStateVersion++;
+    this.isUploading = false;
     this.excelUpload?.unsubscribe();
     this.excelUpload = null;
     this.imagesUpload?.unsubscribe();
@@ -464,5 +476,9 @@ export class InvoiceUploadComponent implements OnInit, OnDestroy {
     this.reconciliation = { missingInvoiceImages: [], missingInvoices: [] };
     this.missingImageDetails = [];
     this.missingInvoiceDrafts = {};
+  }
+
+  private createUploadId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   }
 }

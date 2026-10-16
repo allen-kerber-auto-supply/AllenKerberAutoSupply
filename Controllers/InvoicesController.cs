@@ -1,4 +1,5 @@
 using System.Data;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -28,7 +29,8 @@ public sealed class InvoicesController(
     IMisreadBarcodeService misreadBarcodeService,
     IInvoiceStoreCache invoiceStoreCache,
     IUploadProgressEventBus uploadProgressEventBus,
-    IOptions<GoogleCloudOptions> googleCloudOptions) : ControllerBase
+    IOptions<GoogleCloudOptions> googleCloudOptions,
+    ILogger<InvoicesController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Search([FromQuery] string? invoiceNumber, [FromQuery] string? customerNumber, [FromQuery] string? sortKey, [FromQuery] string? sortDirection, [FromQuery] int page = 0, CancellationToken cancellationToken = default)
@@ -122,32 +124,62 @@ public sealed class InvoicesController(
 
     [HttpPost("upload-excel")]
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
-    public async Task<IActionResult> UploadExcel([FromForm] IFormFile excelFile, [FromForm] int storeNumber, CancellationToken cancellationToken)
+    public async Task<IActionResult> UploadExcel([FromForm] IFormFile excelFile, [FromForm] int storeNumber, [FromForm] string? uploadId, CancellationToken cancellationToken)
     {
         if (excelFile is null || excelFile.Length == 0)
             return BadRequest("An Excel file is required.");
 
-        uploadProgressEventBus.Reset("excel");
-        uploadProgressEventBus.Publish("excel", "in_progress", 0, "Reading the selected Excel file...");
-        return await ImportInvoiceFileAsync(excelFile, storeNumber, cancellationToken);
+        string operation;
+        try
+        {
+            operation = GetUploadOperation("excel", uploadId);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        uploadProgressEventBus.Reset(operation);
+        uploadProgressEventBus.Publish(operation, "in_progress", 0, "Reading the selected Excel file...");
+        return await ImportInvoiceFileAsync(excelFile, storeNumber, operation, cancellationToken);
     }
 
     [HttpPost("upload-csv")]
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
-    public async Task<IActionResult> UploadCsv([FromForm] IFormFile csvFile, [FromForm] int storeNumber, CancellationToken cancellationToken)
+    public async Task<IActionResult> UploadCsv([FromForm] IFormFile csvFile, [FromForm] int storeNumber, [FromForm] string? uploadId, CancellationToken cancellationToken)
     {
         if (csvFile is null || csvFile.Length == 0)
             return BadRequest("A CSV file is required.");
 
-        return await ImportInvoiceFileAsync(csvFile, storeNumber, cancellationToken);
+        string operation;
+        try
+        {
+            operation = GetUploadOperation("excel", uploadId);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        return await ImportInvoiceFileAsync(csvFile, storeNumber, operation, cancellationToken);
     }
 
-    private async Task<IActionResult> ImportInvoiceFileAsync(IFormFile file, int storeNumber, CancellationToken cancellationToken)
+    private static string GetUploadOperation(string operation, string? uploadId)
+    {
+        if (string.IsNullOrWhiteSpace(uploadId))
+            return operation;
+        if (uploadId.Length > 80 || uploadId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '_'))
+            throw new ArgumentException("The upload ID is invalid.", nameof(uploadId));
+        return $"{operation}:{uploadId}";
+    }
+
+    private async Task<IActionResult> ImportInvoiceFileAsync(IFormFile file, int storeNumber, string operation, CancellationToken cancellationToken)
     {
         if (storeNumber <= 0)
             return BadRequest("A store number is required.");
 
         var imported = 0;
+        var processed = 0;
         var errors = new List<string>();
         var rows = new List<Dictionary<string, string>>();
 
@@ -229,43 +261,110 @@ public sealed class InvoicesController(
         }
 
         var totalRows = rows.Count;
-        var operation = "excel";
-        uploadProgressEventBus.Publish(operation, "in_progress", 0, "Preparing to import invoice rows...", 0, totalRows);
-
-        for (var i = 0; i < rows.Count; i++)
+        var customerInitializations = new ConcurrentDictionary<int, Lazy<Task<bool>>>();
+        foreach (var row in rows)
         {
-            var row = rows[i];
-            var rowImport = await TryImportRowAsync(row, storeNumber, cancellationToken);
-            if (rowImport.imported)
-            {
-                imported++;
-            }
-            else if (!string.IsNullOrWhiteSpace(rowImport.error))
-            {
-                errors.Add(rowImport.error);
-            }
+            var invoiceValue = GetRowValue(row, "invoice_no", "invoiceNo", "invoice number", "invoicenumber", "invoice no");
+            if (string.IsNullOrWhiteSpace(invoiceValue))
+                continue;
 
-            var percent = totalRows == 0 ? 100 : (int)Math.Round((double)(i + 1) / totalRows * 100d);
-            uploadProgressEventBus.Publish(operation, "in_progress", percent, $"Imported {imported} of {totalRows} rows.", imported, totalRows);
+            var customerNumber = ParseInt(GetRowValue(row, "customer_no", "customerNo", "customer number", "customer number ", "customernumber")) ?? 0;
+            var customer = GetCustomerFromRow(row, customerNumber);
+            if (customer is not null)
+            {
+                customerInitializations.TryAdd(customerNumber, new Lazy<Task<bool>>(
+                    () => customerRepository.EnsureCustomerAsync(customer, cancellationToken),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
+            }
         }
 
-        uploadProgressEventBus.Publish(operation, "completed", 100, $"Imported {imported} invoice rows.", imported, totalRows);
+        uploadProgressEventBus.Publish(operation, "in_progress", 0, $"Preparing to import {totalRows} invoice rows...", 0, totalRows);
+        const int rowsPerBatch = 100;
+        for (var offset = 0; offset < rows.Count; offset += rowsPerBatch)
+        {
+            var rowBatch = rows.Skip(offset).Take(rowsPerBatch).ToArray();
+            var preparedRows = new InvoiceImportRecord?[rowBatch.Length];
+            var preparationErrors = new string?[rowBatch.Length];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, rowBatch.Length),
+                new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken },
+                async (index, token) =>
+                {
+                    var result = await PrepareInvoiceRowAsync(rowBatch[index], customerInitializations, token);
+                    preparedRows[index] = result.invoice;
+                    preparationErrors[index] = result.error;
+                });
+
+            var batchInvoices = preparedRows.OfType<InvoiceImportRecord>().ToArray();
+            var batchImported = 0;
+            if (batchInvoices.Length > 0)
+            {
+                try
+                {
+                    await repository.UpsertInvoiceDataBatchAsync(batchInvoices, storeNumber, cancellationToken);
+                    batchImported = batchInvoices.Length;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Batched invoice import failed; retrying {InvoiceCount} invoices individually.", batchInvoices.Length);
+                    var batchErrors = new string?[batchInvoices.Length];
+                    await Parallel.ForEachAsync(
+                        Enumerable.Range(0, batchInvoices.Length),
+                        new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken },
+                        async (index, token) =>
+                        {
+                            var result = await TryUpsertInvoiceRowAsync(batchInvoices[index], storeNumber, token);
+                            batchErrors[index] = result.error;
+                            if (result.imported)
+                                Interlocked.Increment(ref batchImported);
+                        });
+
+                    for (var index = 0; index < batchErrors.Length; index++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(batchErrors[index]))
+                            errors.Add(batchErrors[index]!);
+                    }
+                }
+            }
+
+            imported += batchImported;
+            errors.AddRange(preparationErrors.OfType<string>());
+            processed += rowBatch.Length;
+            var percent = totalRows == 0 ? 99 : Math.Min(99, (int)Math.Round((double)processed / totalRows * 100d));
+            uploadProgressEventBus.Publish(
+                operation,
+                "in_progress",
+                percent,
+                $"Processed {processed} of {totalRows} rows; {imported} invoices imported.",
+                processed,
+                totalRows);
+        }
 
         var reconciliation = await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken);
+        uploadProgressEventBus.Publish(operation, "completed", 100, $"Completed: {imported} invoices imported from {processed} rows.", processed, totalRows);
         return Ok(new
         {
             imported,
+            processed,
+            totalRows,
             errors,
             reconciliation
         });
     }
 
-    private async Task<(bool imported, string? error)> TryImportRowAsync(Dictionary<string, string> row, int storeNumber, CancellationToken cancellationToken)
+    private async Task<(InvoiceImportRecord? invoice, string? error)> PrepareInvoiceRowAsync(
+        Dictionary<string, string> row,
+        ConcurrentDictionary<int, Lazy<Task<bool>>> customerInitializations,
+        CancellationToken cancellationToken)
     {
         var invoiceValue = GetRowValue(row, "invoice_no", "invoiceNo", "invoice number", "invoicenumber", "invoice no");
         if (string.IsNullOrWhiteSpace(invoiceValue))
         {
-            return (false, null);
+            return (null, null);
         }
 
         var customerNo = ParseInt(GetRowValue(row, "customer_no", "customerNo", "customer number", "customer number ", "customernumber")) ?? 0;
@@ -278,25 +377,56 @@ public sealed class InvoicesController(
         var poNumber = GetRowValue(row, "po_number", "poNumber", "po number", "ponumber") ?? string.Empty;
         try
         {
-            if (customer is not null)
-                await customerRepository.EnsureCustomerAsync(customer, cancellationToken);
+            if (customer is not null && customerInitializations.TryGetValue(customerNo, out var customerInitialization))
+                await customerInitialization.Value;
 
-            await repository.UpsertInvoiceDataAsync(
+            return (new InvoiceImportRecord(
                 customerNo,
                 invoiceValue,
                 invoiceDate,
                 amount,
                 transactionType,
                 employeeId,
-                storeNumber,
                 paymentMethod,
-                poNumber,
-                cancellationToken);
-            return (true, null);
+                poNumber), null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            return (false, $"Unable to import invoice {invoiceValue}: {ex.Message}");
+            return (null, $"Unable to import invoice {invoiceValue}: {ex.Message}");
+        }
+    }
+
+    private async Task<(bool imported, string? error)> TryUpsertInvoiceRowAsync(
+        InvoiceImportRecord invoice,
+        int storeNumber,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.UpsertInvoiceDataAsync(
+                invoice.CustomerNumber,
+                invoice.InvoiceNumber,
+                invoice.InvoiceDate,
+                invoice.InvoiceAmount,
+                invoice.TransactionType,
+                invoice.EmployeeId,
+                storeNumber,
+                invoice.PaymentMethod,
+                invoice.PoNumber,
+                cancellationToken);
+            return (true, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Unable to import invoice {invoice.InvoiceNumber}: {ex.Message}");
         }
     }
 
@@ -355,7 +485,7 @@ public sealed class InvoicesController(
     [HttpPost("upload-images")]
     [Authorize(Roles = $"{RoleNames.InvoiceAdmin},{RoleNames.InvoiceUser}")]
     [RequestSizeLimit(100 * 1024 * 1024)]
-    public async Task<IActionResult> UploadImages([FromForm] List<IFormFile> files, [FromForm] int storeNumber, CancellationToken cancellationToken)
+    public async Task<IActionResult> UploadImages([FromForm] List<IFormFile> files, [FromForm] int storeNumber, [FromForm] string? uploadId, CancellationToken cancellationToken)
     {
         if (storeNumber <= 0)
             return BadRequest("A store number is required.");
@@ -363,10 +493,19 @@ public sealed class InvoicesController(
         if (files is null || files.Count == 0)
             return BadRequest("At least one image file is required.");
 
+        string operation;
+        try
+        {
+            operation = GetUploadOperation("images", uploadId);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
         var results = new List<string>();
         var errors = new List<string>();
         var validFiles = files.Where(file => file is not null && file.Length > 0).ToList();
-        var operation = "images";
 
         uploadProgressEventBus.Publish(operation, "in_progress", 0, "Preparing image upload queue...", 0, validFiles.Count);
 
@@ -401,19 +540,21 @@ public sealed class InvoicesController(
                 errors.Add($"Failed to process {file.FileName}: {ex.Message}");
             }
 
-            var percent = validFiles.Count == 0 ? 100 : (int)Math.Round((double)(i + 1) / validFiles.Count * 100d);
-            uploadProgressEventBus.Publish(operation, "in_progress", percent, $"Processed {results.Count} of {validFiles.Count} images.", results.Count, validFiles.Count);
+            var percent = validFiles.Count == 0 ? 99 : Math.Min(99, (int)Math.Round((double)(i + 1) / validFiles.Count * 100d));
+            uploadProgressEventBus.Publish(operation, "in_progress", percent, $"Processed {i + 1} of {validFiles.Count} image files; {results.Count} uploaded.", i + 1, validFiles.Count);
         }
 
-        uploadProgressEventBus.Publish(operation, "completed", 100, $"Processed {results.Count} images.", results.Count, validFiles.Count);
+        var reconciliation = await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken);
+        var misreadBarcodes = await misreadBarcodeService.ListMisreadBarcodesAsync(cancellationToken);
+        uploadProgressEventBus.Publish(operation, "completed", 100, $"Completed: {results.Count} images uploaded from {validFiles.Count} files.", validFiles.Count, validFiles.Count);
 
         return Ok(new
         {
             processed = results.Count,
             errors,
             uploaded = results,
-            reconciliation = await repository.GetUploadReconciliationAsync(storeNumber, cancellationToken),
-            misreadBarcodes = await misreadBarcodeService.ListMisreadBarcodesAsync(cancellationToken)
+            reconciliation,
+            misreadBarcodes
         });
     }
 

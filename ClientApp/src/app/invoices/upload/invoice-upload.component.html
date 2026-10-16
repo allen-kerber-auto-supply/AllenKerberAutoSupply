@@ -1,3 +1,4 @@
+<fieldset class="upload-control-scope" [disabled]="isUploading" [attr.aria-busy]="isUploading">
 <section class="workspace invoice-workspace">
   <div class="heading invoice-upload-heading"><div><p class="eyebrow">Invoices</p><p>Import Excel invoice data and/or upload a folder of scanned images for the selected store.</p></div><button class="button secondary" type="button" (click)="backRequested.emit()">Back to Invoice Lookup</button></div>
   <div class="card upload-panel">
@@ -37,3 +38,4 @@
     </div>
   </dialog>
 </section>
+</fieldset>
