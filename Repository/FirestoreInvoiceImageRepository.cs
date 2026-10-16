@@ -234,8 +234,10 @@ public sealed class FirestoreInvoiceImageRepository(
 
     
 
-    public async Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default)
+    public async Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default, string? uploadSessionId = null)
     {
+        ArgumentNullException.ThrowIfNull(imageStream);
+
         string normalized = InvoiceNumberNormalizer.NormalizeForStorage(invoiceNumber);
 
         if (invoiceOnly)
@@ -272,70 +274,126 @@ public sealed class FirestoreInvoiceImageRepository(
         string bucketName = gcpOptions.Value.ImageBucket;
         string resolvedContentType = string.IsNullOrWhiteSpace(contentType) ? "image/png" : contentType;
         string finalObjectName = string.Empty;
-
-        await firestore.RunTransactionAsync(async transaction =>
+        var replacedObjectNames = new HashSet<(string Bucket, string Name)>();
+        MemoryStream? bufferedImageStream = null;
+        Stream uploadStream = imageStream;
+        if (!imageStream.CanSeek)
         {
-            var matchingImages = await ReadMatchingImageLookupsAsync(transaction, matchingImageReferences, docRef);
-            var invoiceSnapshot = invoiceDocumentReference is null
-                ? null
-                : await transaction.GetSnapshotAsync(invoiceDocumentReference);
-            var hasInvoice = invoiceSnapshot?.Exists == true;
-            var lookup = MergeInvoiceImageLookups(matchingImages, storeNumber, normalized, bucketName, resolvedContentType);
+            bufferedImageStream = new MemoryStream();
+            await imageStream.CopyToAsync(bufferedImageStream, cancellationToken);
+            uploadStream = bufferedImageStream;
+        }
 
-            int targetPage = pageIndex ?? (lookup.Pages.Count + 1);
-            finalObjectName = $"invoices/{storeNumber}/{normalized}/page_{targetPage}.png";
-
-            imageStream.Position = 0;
-            await storageClient.UploadObjectAsync(
-                bucketName,
-                finalObjectName,
-                resolvedContentType,
-                imageStream,
-                cancellationToken: cancellationToken);
-
-            var page = lookup.Pages.FirstOrDefault(p => p.PageIndex == targetPage);
-            if (page is null)
+        try
+        {
+            await firestore.RunTransactionAsync(async transaction =>
             {
-                page = new InvoiceImagePage
+                var matchingImages = await ReadMatchingImageLookupsAsync(transaction, matchingImageReferences, docRef);
+                var invoiceSnapshot = invoiceDocumentReference is null
+                    ? null
+                    : await transaction.GetSnapshotAsync(invoiceDocumentReference);
+                var hasInvoice = invoiceSnapshot?.Exists == true;
+                var lookup = MergeInvoiceImageLookups(matchingImages, storeNumber, normalized, bucketName, resolvedContentType);
+
+                bool isSameUploadSession = !string.IsNullOrWhiteSpace(uploadSessionId) &&
+                    string.Equals(lookup.UploadSessionId, uploadSessionId, StringComparison.Ordinal);
+                if (!string.IsNullOrWhiteSpace(uploadSessionId) && !isSameUploadSession)
                 {
-                    PageIndex = targetPage,
-                    ObjectName = finalObjectName,
-                    BucketName = bucketName,
-                    ContentType = resolvedContentType,
-                    UploadedAt = Timestamp.GetCurrentTimestamp()
-                };
-                lookup.Pages.Add(page);
-            }
-            else
-            {
-                page.ObjectName = finalObjectName;
-                page.BucketName = bucketName;
-                page.ContentType = resolvedContentType;
-                page.UploadedAt = Timestamp.GetCurrentTimestamp();
-            }
+                    foreach (var item in matchingImages)
+                    {
+                        foreach (var oldPage in item.Lookup.Pages ?? [])
+                        {
+                            if (!string.IsNullOrWhiteSpace(oldPage.ObjectName))
+                                replacedObjectNames.Add((string.IsNullOrWhiteSpace(oldPage.BucketName) ? bucketName : oldPage.BucketName, oldPage.ObjectName));
+                        }
 
-            lookup.Pages = lookup.Pages.OrderBy(p => p.PageIndex).ToList();
-            lookup.TotalPages = lookup.Pages.Count;
-            lookup.HasInvoice = lookup.HasInvoice || hasInvoice;
-            lookup.BucketName = bucketName;
-            lookup.ContentType = resolvedContentType;
-            lookup.ObjectName = finalObjectName;
-            lookup.UploadedAt = Timestamp.GetCurrentTimestamp();
+                        if (!string.IsNullOrWhiteSpace(item.Lookup.ObjectName))
+                            replacedObjectNames.Add((string.IsNullOrWhiteSpace(item.Lookup.BucketName) ? bucketName : item.Lookup.BucketName, item.Lookup.ObjectName));
+                    }
 
-            transaction.Set(docRef, lookup, SetOptions.Overwrite);
-            DeleteDuplicateImageDocuments(transaction, matchingImages, docRef);
+                    lookup.Pages.Clear();
+                    lookup.ObjectName = string.Empty;
+                    lookup.TotalPages = 0;
+                }
 
-            if (invoiceDocumentReference is not null && invoiceSnapshot?.Exists == true)
-            {
-                transaction.Update(invoiceDocumentReference, new Dictionary<string, object>
+                int targetPage = pageIndex ?? (isSameUploadSession
+                    ? lookup.Pages.Count == 0 ? 1 : lookup.Pages.Max(page => page.PageIndex) + 1
+                    : 1);
+                finalObjectName = $"invoices/{storeNumber}/{normalized}/page_{targetPage}.png";
+
+                uploadStream.Position = 0;
+                await storageClient.UploadObjectAsync(
+                    bucketName,
+                    finalObjectName,
+                    resolvedContentType,
+                    uploadStream,
+                    cancellationToken: cancellationToken);
+
+                var page = lookup.Pages.FirstOrDefault(p => p.PageIndex == targetPage);
+                if (page is null)
                 {
-                    { nameof(Invoice.HasImages), true },
-                    { nameof(Invoice.ImageObjectName), finalObjectName }
-                });
-            }
-        }, cancellationToken: cancellationToken);
+                    page = new InvoiceImagePage
+                    {
+                        PageIndex = targetPage,
+                        ObjectName = finalObjectName,
+                        BucketName = bucketName,
+                        ContentType = resolvedContentType,
+                        UploadedAt = Timestamp.GetCurrentTimestamp()
+                    };
+                    lookup.Pages.Add(page);
+                }
+                else
+                {
+                    page.ObjectName = finalObjectName;
+                    page.BucketName = bucketName;
+                    page.ContentType = resolvedContentType;
+                    page.UploadedAt = Timestamp.GetCurrentTimestamp();
+                }
 
-        return finalObjectName;
+                lookup.Pages = lookup.Pages.OrderBy(p => p.PageIndex).ToList();
+                lookup.TotalPages = lookup.Pages.Count;
+                lookup.HasInvoice = lookup.HasInvoice || hasInvoice;
+                lookup.BucketName = bucketName;
+                lookup.ContentType = resolvedContentType;
+                lookup.ObjectName = finalObjectName;
+                lookup.UploadedAt = Timestamp.GetCurrentTimestamp();
+                if (!string.IsNullOrWhiteSpace(uploadSessionId))
+                    lookup.UploadSessionId = uploadSessionId;
+
+                transaction.Set(docRef, lookup, SetOptions.Overwrite);
+                DeleteDuplicateImageDocuments(transaction, matchingImages, docRef);
+
+                if (invoiceDocumentReference is not null && invoiceSnapshot?.Exists == true)
+                {
+                    transaction.Update(invoiceDocumentReference, new Dictionary<string, object>
+                    {
+                        { nameof(Invoice.HasImages), true },
+                        { nameof(Invoice.ImageObjectName), finalObjectName }
+                    });
+                }
+            }, cancellationToken: cancellationToken);
+
+            foreach (var (bucket, name) in replacedObjectNames)
+            {
+                if (string.Equals(name, finalObjectName, StringComparison.Ordinal) &&
+                    string.Equals(bucket, bucketName, StringComparison.Ordinal))
+                    continue;
+
+                try
+                {
+                    await storageClient.DeleteObjectAsync(bucket, name, cancellationToken: cancellationToken);
+                }
+                catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                }
+            }
+
+            return finalObjectName;
+        }
+        finally
+        {
+            bufferedImageStream?.Dispose();
+        }
     }
 
     public async Task<InvoiceImageLookup> UpsertInvoiceLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default)
@@ -367,6 +425,10 @@ public sealed class FirestoreInvoiceImageRepository(
         DocumentReference canonicalReference,
         CancellationToken cancellationToken)
     {
+        var canonicalSnapshot = await canonicalReference.GetSnapshotAsync(cancellationToken);
+        if (canonicalSnapshot.Exists)
+            return [canonicalReference];
+
         var snapshot = await firestore.Collection("invoice_images")
             .WhereEqualTo(nameof(InvoiceImageLookup.StoreNumber), storeNumber)
             .GetSnapshotAsync(cancellationToken);

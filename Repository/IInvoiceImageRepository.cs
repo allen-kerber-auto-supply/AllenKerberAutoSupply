@@ -6,7 +6,7 @@ public interface IInvoiceImageRepository
 {
     Task<InvoiceImageLookup?> GetInvoiceImageLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default);
     Task<Stream?> GetInvoiceImageStreamAsync(string invoiceNumber, int storeNumber, int pageIndex = 1, CancellationToken cancellationToken = default);
-    Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default);
+    Task<string> InsertInvoiceImageAsync(string invoiceNumber, int storeNumber, Stream imageStream, string contentType, bool invoiceOnly, int? pageIndex = null, CancellationToken cancellationToken = default, string? uploadSessionId = null);
     Task<InvoiceImageLookup> UpsertInvoiceLookupAsync(string invoiceNumber, int storeNumber, CancellationToken cancellationToken = default);
     Task DeleteInvoiceImagesAsync(int storeNumber, string invoiceNumber, CancellationToken cancellationToken = default);
     Task ReassignInvoiceAsync(string currentInvoiceNumber, string newInvoiceNumber, int storeNumber, CancellationToken cancellationToken = default);

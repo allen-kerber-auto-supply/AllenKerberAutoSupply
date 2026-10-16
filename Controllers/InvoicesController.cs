@@ -503,6 +503,10 @@ public sealed class InvoicesController(
             return BadRequest(ex.Message);
         }
 
+        string uploadSessionId = string.IsNullOrWhiteSpace(uploadId)
+            ? Guid.NewGuid().ToString("N")
+            : uploadId;
+
         var results = new List<string>();
         var errors = new List<string>();
         var validFiles = files.Where(file => file is not null && file.Length > 0).ToList();
@@ -530,7 +534,8 @@ public sealed class InvoicesController(
                         sourceForUpload,
                         file.ContentType ?? "image/png",
                         false,
-                        cancellationToken: cancellationToken);
+                        cancellationToken: cancellationToken,
+                        uploadSessionId: uploadSessionId);
 
                     results.Add(objectName);
                 }
